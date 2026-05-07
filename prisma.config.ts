@@ -6,8 +6,10 @@ dotenv.config();
 // Aggressively find any postgres connection string in the environment
 const getDbUrl = () => {
   const envVars = [
-    "DATABASE_URL",
+    "POSTGRES_URL_NON_POOLING",
     "POSTGRES_PRISMA_URL",
+    "DATABASE_URL_UNPOOLED",
+    "DATABASE_URL",
     "POSTGRES_URL",
     "SUPABASE_DATABASE_URL",
     "SUPABASE_URL",
