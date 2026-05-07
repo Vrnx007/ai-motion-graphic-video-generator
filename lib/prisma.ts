@@ -4,7 +4,10 @@ import { Pool } from 'pg';
 import "dotenv/config"; // Ensure env vars are loaded manually if not using Next.js automatic loading
 
 const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || "";
-const pool = new Pool({ connectionString });
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+});
 const adapter = new PrismaPg(pool);
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
