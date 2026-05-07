@@ -73,46 +73,82 @@ export default function GenerateClient() {
     if (!videoCode) return;
     setRendering(true);
     setDownloadProgress(0);
+
     try {
-      // Progress simulation since server-side rendering doesn't provide stream progress yet
-      const progressInterval = setInterval(() => {
-        setDownloadProgress((prev) => {
-          if (prev >= 95) return prev;
-          return prev + 5;
-        });
-      }, 2000);
+      // Find the Remotion player wrapper
+      const playerEl = document.querySelector("[data-remotion-player='true']");
+      const videoEl = playerEl?.querySelector("video") as HTMLVideoElement | null;
+      const canvasEl = playerEl?.querySelector("canvas") as HTMLCanvasElement | null;
 
-      const res = await fetch("/api/render-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoCode, duration, aspectRatio }),
-      });
+      let stream: MediaStream | null = null;
 
-      clearInterval(progressInterval);
-
-      if (!res.ok) {
-        let errorMsg = "Render failed";
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch {
-          errorMsg = `Server error (${res.status}): ${res.statusText}`;
-        }
-        throw new Error(errorMsg);
+      if (videoEl && (videoEl as any).captureStream) {
+        stream = (videoEl as any).captureStream(30);
+      } else if (canvasEl && (canvasEl as any).captureStream) {
+        stream = (canvasEl as any).captureStream(30);
       }
 
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      if (!stream) {
+        throw new Error("Could not capture video stream. Make sure the animation is playing in the preview first.");
+      }
+
+      // Try to capture audio from any <audio> element inside the player
+      try {
+        const audioEl = document.querySelector("audio") as HTMLAudioElement | null;
+        if (audioEl && (audioEl as any).captureStream) {
+          const audioStream = (audioEl as any).captureStream();
+          audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream!.addTrack(track));
+        }
+      } catch {
+        // Audio capture is optional
+      }
+
+      // Pick the best supported MIME type
+      const mimeType = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ].find((m) => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
+
+      const chunks: Blob[] = [];
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+      const totalMs = duration * 1000;
+      const startTime = Date.now();
+
+      // Tick progress bar
+      const progressInterval = setInterval(() => {
+        const pct = Math.min(95, Math.round(((Date.now() - startTime) / totalMs) * 100));
+        setDownloadProgress(pct);
+      }, 200);
+
+      recorder.start(100);
+
+      // Wait for the recording duration + small buffer
+      await new Promise<void>((resolve, reject) => {
+        recorder.onstop = () => resolve();
+        recorder.onerror = (e) => reject(new Error("Recording error: " + (e as any).error));
+        setTimeout(() => {
+          recorder.stop();
+          clearInterval(progressInterval);
+        }, totalMs + 800);
+      });
+
+      setDownloadProgress(100);
+
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
+
       const a = document.createElement("a");
       a.href = url;
-      a.download = `video-${Date.now()}.mp4`;
+      a.download = `animation-${Date.now()}.webm`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-      setDownloadProgress(100);
       setShowDownloadSuccess(true);
     } catch (error: any) {
       console.error(error);
@@ -308,7 +344,7 @@ export default function GenerateClient() {
                   className="py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)] disabled:opacity-50"
                 >
                   {rendering ? <Loader2 className="animate-spin w-4 h-4" /> : <Download size={16} />}
-                  {rendering ? "Rending MP4..." : "Download MP4"}
+                  {rendering ? "Recording..." : "Download Video"}
                 </motion.button>
               </motion.div>
             )}
@@ -316,7 +352,7 @@ export default function GenerateClient() {
             {rendering && (
               <div className="space-y-2">
                 <p className="text-[10px] text-blue-400/70 font-medium italic text-center animate-pulse">
-                  Rendering your video... {downloadProgress > 0 ? `${downloadProgress}%` : 'Processing...'}
+                  Recording your animation... {downloadProgress > 0 ? `${downloadProgress}%` : 'Starting...'}
                 </p>
                 {downloadProgress > 0 && (
                   <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
