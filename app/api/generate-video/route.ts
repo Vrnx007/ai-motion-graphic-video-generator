@@ -11,7 +11,12 @@ export async function POST(req: Request) {
 
     const duration = Math.min(Math.max(Number(rawDuration) || 10, 3), 300);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-3-flash-preview",
+      generationConfig: {
+        maxOutputTokens: 8192,
+      }
+    });
 
     // Build brand injection block
     let brandBlock = "";
@@ -299,6 +304,13 @@ Images:
    Use <Img> (not <img>) for all images.
    Always animate with Ken Burns zoom + pan.
    NEVER use loremflickr.com.
+
+CONCISENESS & SAFETY:
+   - KEEP CODE UNDER 600 LINES.
+   - NEVER use raw SVG <path> data strings longer than 50 characters. Use Lucide icons instead.
+   - NEVER use base64 data strings.
+   - ENSURE all string constants and braces are closed.
+   - If the code is too long, it will be cut off and fail. Be efficient.
 
 
 USER REQUEST
