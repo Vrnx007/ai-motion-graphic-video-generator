@@ -262,8 +262,10 @@ const VideoPreviewBase = ({
           Array.from(cleanTranspiled.matchAll(/\b([A-Z][a-zA-Z0-9_]*)\b/g)).map(m => m[1])
         )
       );
+      const IGNORED_GLOBALS = new Set(["Object", "Math", "Array", "JSON", "Date", "Map", "Set", "Promise", "RegExp", "String", "Number", "Boolean", "Error", "Intl", "Symbol"]);
+
       for (const id of allIdentifiers) {
-        if (!(id in scope)) {
+        if (!IGNORED_GLOBALS.has(id) && !(id in scope)) {
           scope[id] = (props: any) => React.createElement("span", null);
         }
       }
