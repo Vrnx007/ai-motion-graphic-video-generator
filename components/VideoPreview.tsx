@@ -204,10 +204,12 @@ const VideoPreviewBase = ({
 
 
       const SafeVideo = (props: any) => {
+        if (!props.src || typeof props.src !== "string") return null;
         return <RemotionVideo {...props} crossOrigin="anonymous" />;
       };
 
       const SafeOffthreadVideo = (props: any) => {
+        if (!props.src || typeof props.src !== "string") return null;
         return <OffthreadVideo {...props} crossOrigin="anonymous" />;
       };
 
