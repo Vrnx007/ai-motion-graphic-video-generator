@@ -11,7 +11,6 @@ import {
   Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
   BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
 } from "lucide-react";
-import * as LucideIcons from "lucide-react";
 
 const VideoPreviewBase = ({ 
   code, 
@@ -76,26 +75,7 @@ const VideoPreviewBase = ({
 
       // ━━━ LEGACY: Transpile raw JSX → JS ━━━
       // Repair any broken/truncated scenes before transpiling
-      let sanitizedCode = repairStitchedCode(cleanCode);
-
-      // Guard against AI hallucinating un-injected Lucide icons (e.g., <Share2 />)
-      const iconNames = Object.keys(LucideIcons).filter(k => /^[A-Z]/.test(k));
-      const iconValues = iconNames.map(k => (LucideIcons as any)[k]);
-
-      const allowedComponents = new Set([
-        "React", "AbsoluteFill", "Sequence", "Series", "Loop", "Audio", "Img", "Video", "OffthreadVideo", "MyComposition",
-        ...Array.from({length: 50}, (_, i) => `Scene${i+1}`),
-        ...iconNames
-      ]);
-
-      const usedComponents = Array.from(sanitizedCode.matchAll(/<([A-Z][a-zA-Z0-9_]*)/g)).map(m => m[1]);
-      for (const comp of usedComponents) {
-        if (!allowedComponents.has(comp)) {
-          console.warn(`[VideoPreview] Replacing hallucinated component <${comp}> with <Sparkles>`);
-          sanitizedCode = sanitizedCode.replace(new RegExp(`<${comp}(\\s|>)`, 'g'), `<Sparkles$1`);
-          sanitizedCode = sanitizedCode.replace(new RegExp(`</${comp}>`, 'g'), `</Sparkles>`);
-        }
-      }
+      const sanitizedCode = repairStitchedCode(cleanCode);
 
       const transpiled = Babel.transform(sanitizedCode, {
         presets: ["env", "react", "typescript"],
@@ -128,6 +108,33 @@ const VideoPreviewBase = ({
       const _Math = Math;
       const _Array = Array;
 
+      // 🔹 3b. Build the set of identifiers we inject into scope
+      const injectedNames = new Set([
+        "React", "AbsoluteFill", "useCurrentFrame", "useVideoConfig",
+        "spring", "interpolate", "interpolateColors", "Easing", "Img",
+        "Sequence", "Audio", "Video", "OffthreadVideo", "staticFile",
+        "Series", "Loop", "random", "delayRender", "continueRender",
+        "Math", "Array", "MyComposition",
+        // Lucide icons we explicitly import
+        "Monitor", "Cpu", "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity",
+        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
+        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle",
+        ...Array.from({length: 50}, (_, i) => `Scene${i+1}`),
+      ]);
+
+      // 🔹 3c. Scan transpiled code for ALL PascalCase identifiers the AI used
+      //    and generate stub declarations for anything we don't inject.
+      //    This makes ReferenceError IMPOSSIBLE regardless of what the AI writes.
+      const allIdentifiers = Array.from(
+        new Set(
+          Array.from((transpiled || "").matchAll(/\b([A-Z][a-zA-Z0-9_]*)\b/g)).map(m => m[1])
+        )
+      );
+      const stubs = allIdentifiers
+        .filter(id => !injectedNames.has(id))
+        .map(id => `var ${id} = function(props) { return React.createElement("span", null); };`)
+        .join("\n");
+
       // 🔹 4. Create component dynamically
       const createComponent = new Function(
         "React",
@@ -153,8 +160,12 @@ const VideoPreviewBase = ({
         "Math",
         "Array",
         // Icons
-        ...iconNames,
+        "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity", "Monitor", "Cpu",
+        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
+        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle",
         `
+        ${stubs}
+
         ${transpiled}
         
         if (typeof MyComposition === "undefined") {
@@ -317,7 +328,9 @@ const VideoPreviewBase = ({
         _Math,
         _Array,
         // Icons
-        ...iconValues
+        Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight, Video, Database, Music, Activity, Monitor, Cpu,
+        Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet, Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
+        BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
       );
 
       // 🔹 5. Wrap into React component
