@@ -88,6 +88,7 @@ BRAND CONTEXT:
   Font: ${brandKit.fonts?.heading || "Inter"}
   Tone: ${brandKit.tone || "professional"}
   Visual Style: ${brandKit.style || "modern"}
+  Preferred Aesthetic: ${brandKit.aesthetic || "AUTO - Derive from brand colors/industry"}
   CTA Text: ${brandKit.cta || "Get Started"}
   Features: ${JSON.stringify(brandKit.features || [])}
   Logo URL: ${brandKit.logoUrl || "N/A"}
@@ -148,19 +149,24 @@ ${images.map((img: any, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt
       "GOOD visual directions:",
       '  "Cinematic dark gradient background with floating particles. Bold headline reveals word-by-word with spring animation. Subtle gradient orbs drift in background."',
       '  "Device-framed screenshot enters from bottom with spring scale. Glassmorphism cards overlay highlighting key features. Animated cursor simulates clicking."',
-      '  "Split layout: kinetic text left, product screenshot right with 3D perspective tilt. Staggered feature bullets animate in."',
-      '  "Animated counter cards spring in one by one. Numbers count up. Glassmorphism panel with glow border."',
+      '  "Split layout: kinetic text left, abstract floating 3D icons right. Staggered feature bullets animate in with continuous drift."',
+      '  "Animated counter cards spring in one by one. Numbers count up. High-saturation background with glow border."',
       "",
       "BAD visual directions (NEVER write these):",
       '  "Show the product" (too vague)',
       '  "Display features" (no motion direction)',
       '  "Zoom into screenshot" (too basic)',
       "",
+      "CRITICAL DIVERSITY RULE: You MUST mix different types of scenes. DO NOT make every scene a screenshot.",
+      "  - Use 1-2 scenes for high-level abstract concepts using typography and floating icons.",
+      "  - Use 1-2 scenes for actual product UI screenshots (Device-framed).",
+      "  - Use 1 scene for kinetic typography (large text, no images).",
+      "",
       "Each scene MUST have a DIFFERENT layout and composition. VARY between:",
-      "  * Centered hero composition",
-      "  * Split-screen (text left, visual right)",
+      "  * Centered hero composition (Text focus)",
+      "  * Split-screen (Text left, visual/icons right)",
       "  * Full-bleed screenshot with glassmorphism overlay cards",
-      "  * Grid/bento layout for multiple features",
+      "  * Grid/bento layout for multiple abstract features",
       "  * Focused metric/counter display",
       "",
 

@@ -70,6 +70,7 @@ Accent Color: ${brandKit.colors?.accent || "#06B6D4"}
 Full Palette: [${(brandKit.brandPalette || []).map((c: string) => `"${c}"`).join(", ")}]
 Font Family: "${brandKit.fonts?.heading || "Inter"}"
 Motion Style: ${brandKit.style || "modern"} / ${brandKit.tone || "professional"}
+Aesthetic: ${brandKit.aesthetic || "AUTO"}
 CTA Text: "${brandKit.cta || "Get Started"}"
 Logo URL: ${proxiedLogo}
 BRAND IMAGES — PROXIED AND WILL RENDER:
@@ -226,16 +227,27 @@ OUTPUT FORMAT:
         "  TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Info, AlertCircle",
         "",
 
-        // ═══ AUDIO ═══
+        // ═══ AUDIO & SOUND DESIGN ═══
         "════════════════════════════════════════",
-        " AUDIO — MANDATORY",
+        " SOUND DESIGN (SFX & MUSIC) — MANDATORY",
         "════════════════════════════════════════",
         "",
-        "<Audio> as VERY FIRST child inside outermost <AbsoluteFill>. volume={0.3}.",
-        'Cinematic: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"',
-        'Upbeat:    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"',
-        'Chill:     "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"',
-        'Tech:      "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"',
+        "1. BACKGROUND MUSIC:",
+        "  Must have ONE <Audio> as VERY FIRST child inside outermost <AbsoluteFill>.",
+        '  Cinematic: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"',
+        '  Upbeat:    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"',
+        '  Tech:      "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"',
+        "  volume={0.2} to keep it subtle.",
+        "",
+        "2. SOUND EFFECTS (SFX) — CRITICAL:",
+        "  You MUST include SFX to make the video feel high-end.",
+        "  - WHOOSH: Use for entrances, fast translations, or new screens sliding in.",
+        '    URL: "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"',
+        "  - UI CLICK: Use when a cursor clicks, a button highlights, or a toggle activates.",
+        '    URL: "https://assets.mixkit.co/active_storage/sfx/1114/1114-preview.mp3"',
+        "",
+        "  HOW TO USE SFX: Place multiple <Audio> tags at the END of the <Sequence> or <AbsoluteFill> and use `startFrom` or `endAt` if necessary, but PREFERRED is wrapping them in `<Sequence from={X}>` to trigger them at specific frames.",
+        "  Example: <Sequence from={15} durationInFrames={30}><Audio src=\"WHOOSH_URL\" volume={0.5}/></Sequence>",
         "",
 
         // ═══ BRAND + SCENE CONTEXT ═══
@@ -248,14 +260,15 @@ OUTPUT FORMAT:
         " CINEMATIC VISUAL DESIGN SYSTEM",
         "════════════════════════════════════════",
         "",
-        "───── 1. BACKGROUND & COLOR ─────",
+        "───── 1. BACKGROUND & COLOR (V2 PREMIUM AESTHETIC) ─────",
         `PRIMARY: ${primaryColor}   SECONDARY: ${secondaryColor}   FONT: '${fontFamily}, sans-serif'`,
+        `AESTHETIC INSTRUCTION: ${brandKit?.aesthetic || "AUTO"}`,
         "",
-        `BACKGROUND: Rich dark cinematic gradient. Example:`,
-        `  background: 'linear-gradient(135deg, #0a0a1a 0%, ${primaryColor}12 40%, #0a0a1a 100%)'`,
-        "NEVER use plain white backgrounds — they look cheap.",
-        "TEXT: #FFFFFF for headlines, rgba(255,255,255,0.6) for body.",
-        `GLOW: textShadow: '0 0 40px ${primaryColor}60'`,
+        "CRITICAL COLOR RULE: If Aesthetic is 'AUTO', generate a PREMIUM, BRIGHT, highly-saturated Stripe-esque aesthetic. DO NOT default to dark mode unless explicitly asked.",
+        `LIGHT MODE: background: 'linear-gradient(135deg, #ffffff 0%, ${primaryColor}15 100%)'`,
+        `DARK MODE: background: 'linear-gradient(135deg, #0a0a1a 0%, ${primaryColor}20 100%)'`,
+        "Use LUMINOUS radial gradients or glassmorphism containers to create depth.",
+        "TEXT: #0f172a for Light mode, #FFFFFF for Dark mode. Use high-contrast for readability.",
         "",
 
         // ═══ 2. SCREENSHOT ANIMATION — ADVANCED ═══
@@ -278,7 +291,10 @@ OUTPUT FORMAT:
         "  * Flow between screens — slide one out to left, next enters from right",
         "",
         "ENTRANCE: spring scale 0.85→1.0 + translateY 40→0",
-        "FLOAT: Math.sin(frame * 0.03) * 4 for subtle continuous hover",
+        "CONTINUOUS MOTION (CRITICAL): NEVER leave the screen static after entrance.",
+        "  - Drift: translateY = interpolate(frame, [0, 300], [0, -15]) for continuous subtle movement.",
+        "  - Float: Math.sin(frame * 0.05) * 8 for floating UI elements.",
+        "  - Parallax: Move background items slightly slower than foreground items.",
         "3D TILT: perspective(1200px) rotateY with subtle interpolated angle",
         "",
         "Place text BELOW or BESIDE images, NEVER on top (readability).",
