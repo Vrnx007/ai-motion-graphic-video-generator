@@ -221,25 +221,42 @@ TEXT RULES:
   • Use bold, impactful words only. Think billboard, not paragraph.
   • Make text glow with textShadow: "0 0 30px primaryColor"
 
-${brandKit ? `BRAND STYLE:
-  Use brand colors: primary=${brandKit.colors?.primary}, secondary=${brandKit.colors?.secondary}
-  Background: ${brandKit.colors?.background || "#0A0A0A"} (DARK backgrounds look premium)
+${brandKit ? `
+★★★ BRAND IDENTITY — NON-NEGOTIABLE ★★★
+  PRIMARY COLOR: ${brandKit.colors?.primary} — USE THIS for accents, highlights, icons, shapes.
+  SECONDARY COLOR: ${brandKit.colors?.secondary || brandKit.colors?.primary} — USE for gradients with primary.
+  BACKGROUND: WHITE (#FFFFFF or #FAFAFA or #F8FAFC). Clean, classy, professional. NEVER dark/black.
+  TEXT COLOR: #1A1A2E or #0F172A (dark navy/charcoal on white background).
   Font: ${brandKit.fonts?.heading || "Inter"}
-  DO NOT use generic blue/purple. USE THE BRAND COLORS.` :
-`COLOR PALETTE: Use a dark background (#0A0A0A, #0F172A, #111827) with vibrant accent colors.
-   Pick a professional palette — NOT plain red/blue/green.`}
+  
+  YOU MUST USE THESE EXACT BRAND COLORS. Do NOT invent random colors.
+  Do NOT use generic blue, purple, teal, or neon colors.
+  The only colors in this video should be: white bg + brand primary + brand secondary + dark text.` :
+`COLOR PALETTE — PROFESSIONAL & CLASSY:
+  Background: WHITE (#FFFFFF, #FAFAFA, or #F8FAFC). Clean, Apple-style.
+  Accent: Pick ONE sophisticated brand color (NOT generic blue/red/green).
+  Text: Dark charcoal (#1A1A2E or #0F172A) on white background.
+  Style: Think Apple, Stripe, Linear — minimal, premium, classy.`}
 
 ${brandKit?.images?.length > 0 ? `
-★ BRAND IMAGES — MANDATORY USAGE ★
-You MUST animate these images prominently:
-${brandKit.images.map((img: any, i: number) => `  <Img src="${img.url}" /> — animate with Ken Burns zoom, 3D tilt, or parallax float`).join("\n")}
-Display images in glassmorphism frames, use scale/rotate animation, and add subtle shadow glow.
+★★★ BRAND IMAGES — ABSOLUTELY MANDATORY ★★★
+You MUST display ALL of these images prominently in the video:
+${brandKit.images.map((img: any, i: number) => `  Scene ${i + 1}: <Img src="${img.url}" style={{width:"100%",height:"100%",objectFit:"cover"}} />`).join("\n")}
+
+HOW TO USE IMAGES:
+- Display each image in a rounded-corner frame with subtle shadow
+- Animate with smooth Ken Burns zoom (scale 1.05 → 1.0 over the scene duration)
+- Add a slight tilt or parallax float animation
+- Place them CENTER STAGE — images are the HERO, text is secondary
+- Use at least 1 image per Sequence block
 ` : ""}
 
 ${brandKit?.logoUrl ? `
-★ LOGO — MUST APPEAR
-Show the logo: <Img src="${brandKit.logoUrl}" /> in at least the intro and outro.
-Animate it with a scale-up spring, add glow shadow, and make it feel premium.
+★★★ LOGO — MUST APPEAR IN VIDEO ★★★
+LOGO URL: "${brandKit.logoUrl}"
+- Show the logo in the FIRST scene (intro) and LAST scene (outro): <Img src="${brandKit.logoUrl}" style={{width:120,height:120,objectFit:"contain"}} />
+- Animate it: spring scale from 0 → 1, with a soft shadow glow
+- The logo must be clearly visible and recognizable
 ` : ""}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
