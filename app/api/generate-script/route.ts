@@ -6,7 +6,7 @@ export const maxDuration = 120;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-const MODEL_CHAIN = ["gemini-2.0-flash", "gemini-1.5-flash"];
+const MODEL_CHAIN = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
 
 async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string> {
   for (const modelName of MODEL_CHAIN) {
