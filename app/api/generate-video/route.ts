@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     const { prompt, duration: rawDuration, aspectVideo, brandKit, scene } = await req.json();
 
-    const duration = Math.min(Math.max(Number(rawDuration) || 10, 3), 60);
+    const duration = Math.min(Math.max(Number(rawDuration) || 10, 3), 300);
 
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 

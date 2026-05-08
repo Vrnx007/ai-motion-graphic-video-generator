@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     console.log("[SAVE] Received save request for user:", session.user.id);
     console.log("[SAVE] Prompt:", prompt);
     console.log("[SAVE] Aspect Ratio:", aspectRatio);
-    const validatedDuration = Math.round(Math.min(Math.max(Number(duration) || 10, 5), 60));
+    const validatedDuration = Math.round(Math.min(Math.max(Number(duration) || 10, 5), 300));
 
     // 3. Create project using the verified user ID
     const project = await db.project.create({

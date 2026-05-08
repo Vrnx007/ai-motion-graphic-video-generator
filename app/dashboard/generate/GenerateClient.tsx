@@ -481,10 +481,10 @@ export default function GenerateClient() {
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Duration</label>
                   <span className="text-[9px] font-black text-blue-400">{duration}s</span>
                 </div>
-                <input type="range" min="5" max="60" step="5" value={duration} onChange={e => setDuration(parseInt(e.target.value))}
+                <input type="range" min="5" max="300" step="5" value={duration} onChange={e => setDuration(parseInt(e.target.value))}
                   className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
                 <div className="flex justify-between text-[7px] text-slate-600 font-bold px-1">
-                  <span>5s</span><span>15s</span><span>30s</span><span>60s</span>
+                  <span>5s</span><span>30s</span><span>60s</span><span>5m</span>
                 </div>
               </div>
 
