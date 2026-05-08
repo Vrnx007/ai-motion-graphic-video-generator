@@ -15,9 +15,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions Session[]
-  accounts Account[]
-  projects Project[]
+  sessions  Session[]
+  accounts  Account[]
+  projects  Project[]
+  brandKits BrandKit[]
 
   @@map("user")
 }
@@ -72,16 +73,54 @@ model Verification {
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  prompt    String   @default("Untitled Animation")
-  videoCode   String    
-  duration    Int      @default(10)
-  aspectRatio String   @default("16:9")
+  id          String    @id @default(cuid())
+  prompt      String    @default("Untitled Animation")
+  videoCode   String
+  duration    Int       @default(10)
+  aspectRatio String    @default("16:9")
+  videoType   String    @default("general")
+  scenes      Json?
   downloadUrl String?
-  createdAt   DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brandKitId  String?
+  brandKit    BrandKit? @relation(fields: [brandKitId], references: [id])
 
   @@map("project")
+  @@index([userId])
+}
+
+model BrandKit {
+  id            String   @id @default(cuid())
+  name          String   @default("My Brand")
+  sourceUrl     String?
+
+  // Visual identity
+  logoUrl       String?
+  colors        Json     // { primary, secondary, accent, background, text }
+  brandPalette  Json?    // string[] up to 8 colors
+  fonts         Json?    // { heading, body }
+
+  // Content extracted
+  headline      String?
+  subheadline   String?
+  features      Json?    // [{ title, description }]
+  cta           String?
+  tone          String?
+  style         String?
+
+  // Images from site
+  images        Json?    // [{ url, alt, context }]
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects      Project[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("brand_kit")
+  @@index([userId])
 }
