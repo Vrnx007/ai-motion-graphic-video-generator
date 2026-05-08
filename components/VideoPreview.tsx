@@ -262,6 +262,7 @@ const VideoPreviewBase = ({
           Array.from(cleanTranspiled.matchAll(/\b([A-Z][a-zA-Z0-9_]*)\b/g)).map(m => m[1])
         )
       );
+      // Force HMR compilation: cache-busting comment 1
       const IGNORED_GLOBALS = new Set(["Object", "Math", "Array", "JSON", "Date", "Map", "Set", "Promise", "RegExp", "String", "Number", "Boolean", "Error", "Intl", "Symbol"]);
 
       for (const id of allIdentifiers) {
@@ -271,9 +272,23 @@ const VideoPreviewBase = ({
       }
 
       // 🔹 4c. Build destructuring preamble + the transpiled code
-      const scopeKeys = Object.keys(scope);
+      // Filter out any accidentally injected globals from the destructure list
+      const scopeKeys = Object.keys(scope).filter(k => !IGNORED_GLOBALS.has(k));
       const destructure = `var {${scopeKeys.join(",")}} = __scope__;`;
-      const functionBody = `${destructure}\n${cleanTranspiled}\nif (typeof MyComposition === "undefined") { throw new Error("MyComposition not found"); }\nreturn MyComposition;`;
+      const functionBody = `
+${destructure}
+// Bulletproof global restoration to prevent Babel polyfills from crashing
+var Object = window.Object;
+var Math = window.Math;
+var Array = window.Array;
+var String = window.String;
+var Number = window.Number;
+var JSON = window.JSON;
+var Symbol = window.Symbol;
+
+${cleanTranspiled}
+if (typeof MyComposition === "undefined") { throw new Error("MyComposition not found"); }
+return MyComposition;`;
 
       const createComponent = new Function("__scope__", functionBody);
       const result = createComponent(scope);
