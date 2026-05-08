@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+﻿import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 
@@ -77,9 +77,9 @@ ${brandContext}
 
 USER REQUEST: ${prompt}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 CRITICAL DURATION REQUIREMENTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 TARGET DURATION: EXACTLY ${targetDuration} seconds
 REQUIRED NUMBER OF SCENES: EXACTLY ${sceneCount} scenes
 AVERAGE DURATION PER SCENE: ${Math.round(targetDuration / sceneCount)} seconds
@@ -88,26 +88,26 @@ THE SUM OF ALL SCENE DURATIONS MUST EQUAL EXACTLY ${targetDuration} SECONDS.
 DO NOT generate fewer scenes. DO NOT make scenes shorter than needed.
 
 VIDEO TYPE TEMPLATES:
-- "product-launch": Hook → Problem → Solution → Demo → Features × 2-3 → Social Proof → Benefits → CTA → Outro
-- "feature-explainer": Hook → Context → Feature 1 → Feature 2 → Feature 3 → Benefits → Demo → CTA → Outro
-- "website-hero": Brand Intro → Value Prop → Key Visual → Features → Demo → Social Proof → CTA → Outro
-- "ad-creative": Hook → Problem → Agitation → Solution → Demo → Proof → CTA
-- "social-teaser": Hook → Quick Demo → Feature Flash × 3 → CTA
-- "general": Hook → Main Content × 2-3 → Supporting Points × 2-3 → Visual Break → CTA → Outro
+- "product-launch": Hook  Problem  Solution  Demo  Features  2-3  Social Proof  Benefits  CTA  Outro
+- "feature-explainer": Hook  Context  Feature 1  Feature 2  Feature 3  Benefits  Demo  CTA  Outro
+- "website-hero": Brand Intro  Value Prop  Key Visual  Features  Demo  Social Proof  CTA  Outro
+- "ad-creative": Hook  Problem  Agitation  Solution  Demo  Proof  CTA
+- "social-teaser": Hook  Quick Demo  Feature Flash  3  CTA
+- "general": Hook  Main Content  2-3  Supporting Points  2-3  Visual Break  CTA  Outro
 
 AVAILABLE TEMPLATES (assign one to each scene via "templateName"):
-- "KineticHero" — Bold typography with staggered word reveals. Best for: hook, intro, CTA, headlines.
-- "BentoGrid" — Apple-style grid layout showcasing 3 features. Best for: features, demo, solution.
-- "FeatureShowcase" — Full-screen image with animated text overlay. Best for: demo, solution, social-proof.
-- "SplitScreen" — Left text / right image layout with slide-in. Best for: problem, solution, features.
-- "StatCounter" — Animated number counters with labels. Best for: social-proof, benefits.
-- "LogoReveal" — Cinematic logo entrance with particles. Best for: intro, outro, CTA.
+- "KineticHero"  Bold typography with staggered word reveals. Best for: hook, intro, CTA, headlines.
+- "BentoGrid"  Apple-style grid layout showcasing 3 features. Best for: features, demo, solution.
+- "FeatureShowcase"  Full-screen image with animated text overlay. Best for: demo, solution, social-proof.
+- "SplitScreen"  Left text / right image layout with slide-in. Best for: problem, solution, features.
+- "StatCounter"  Animated number counters with labels. Best for: social-proof, benefits.
+- "LogoReveal"  Cinematic logo entrance with particles. Best for: intro, outro, CTA.
 
 RULES:
-1. Output ONLY valid JSON — no markdown, no explanation
+1. Output ONLY valid JSON  no markdown, no explanation
 2. Each scene must have: id (number), type (string), duration (seconds), title (short label), text (the on-screen copy), visual (description), templateName (one of the available templates above)
-3. DISTRIBUTE brand images across scenes — every scene with a visual element should have an imageUrl
-4. Use the brand's ACTUAL headlines, features, and CTA text — DO NOT make up generic copy
+3. DISTRIBUTE brand images across scenes  every scene with a visual element should have an imageUrl
+4. Use the brand's ACTUAL headlines, features, and CTA text  DO NOT make up generic copy
 5. THE SUM OF ALL SCENE DURATIONS MUST EQUAL EXACTLY ${targetDuration} SECONDS
 6. You MUST generate EXACTLY ${sceneCount} scenes
 7. Choose a musicMood from: upbeat, cinematic, energetic, chill, dramatic, tech, luxury
