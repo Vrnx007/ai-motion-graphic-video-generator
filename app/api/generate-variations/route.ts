@@ -6,6 +6,33 @@ export const maxDuration = 60;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+const MODEL_CHAIN = ["gemini-2.0-flash", "gemini-1.5-flash"];
+
+async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string> {
+  for (const modelName of MODEL_CHAIN) {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`[generate-variations] Trying ${modelName} (attempt ${attempt + 1})`);
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      } catch (err: any) {
+        const status = err?.status || err?.httpStatusCode || 0;
+        const isRetryable = status === 503 || status === 429 || err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("high demand") || err?.message?.includes("RESOURCE_EXHAUSTED");
+        if (isRetryable && attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.log(`[generate-variations] ${modelName} returned ${status}, retrying in ${Math.round(delay)}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        if (isRetryable) { break; }
+        throw err;
+      }
+    }
+  }
+  throw new Error("All AI models are currently overloaded. Please try again in a minute.");
+}
+
 // Generate multiple variations of hooks, CTAs, or styles
 export async function POST(req: Request) {
   try {
@@ -18,7 +45,7 @@ export async function POST(req: Request) {
     // variationType: "hooks" | "ctas" | "styles" | "angles"
     // count: 3-5
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
 
     const brandContext = brandKit ? `
 Brand: ${brandKit.headline || brandKit.name || ""}
@@ -47,8 +74,8 @@ Output ONLY valid JSON array. Each item should have: "id" (number), "name" (stri
 
 Example: [{"id":1,"name":"Bold & Direct","description":"High contrast, big text...","promptModifier":"Use bold typography, high contrast colors, fast cuts..."}]`;
 
-    const result = await model.generateContent(systemPrompt);
-    let text = result.response.text()
+    let text = await generateWithRetry(systemPrompt);
+    text = text
       .replace(/^```(?:json)?\s*\n?/gim, "")
       .replace(/\n?```\s*$/gim, "")
       .trim();
