@@ -11,6 +11,7 @@ import {
   Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
   BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 
 const VideoPreviewBase = ({ 
   code, 
@@ -78,12 +79,13 @@ const VideoPreviewBase = ({
       let sanitizedCode = repairStitchedCode(cleanCode);
 
       // Guard against AI hallucinating un-injected Lucide icons (e.g., <Share2 />)
+      const iconNames = Object.keys(LucideIcons).filter(k => /^[A-Z]/.test(k));
+      const iconValues = iconNames.map(k => (LucideIcons as any)[k]);
+
       const allowedComponents = new Set([
         "React", "AbsoluteFill", "Sequence", "Series", "Loop", "Audio", "Img", "Video", "OffthreadVideo", "MyComposition",
         ...Array.from({length: 50}, (_, i) => `Scene${i+1}`),
-        "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity", "Monitor", "Cpu",
-        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
-        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle"
+        ...iconNames
       ]);
 
       const usedComponents = Array.from(sanitizedCode.matchAll(/<([A-Z][a-zA-Z0-9_]*)/g)).map(m => m[1]);
@@ -151,9 +153,7 @@ const VideoPreviewBase = ({
         "Math",
         "Array",
         // Icons
-        "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity", "Monitor", "Cpu",
-        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
-        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle",
+        ...iconNames,
         `
         ${transpiled}
         
@@ -317,9 +317,7 @@ const VideoPreviewBase = ({
         _Math,
         _Array,
         // Icons
-        Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight, Video, Database, Music, Activity, Monitor, Cpu,
-        Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet, Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
-        BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
+        ...iconValues
       );
 
       // 🔹 5. Wrap into React component
