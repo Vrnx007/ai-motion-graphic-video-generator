@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { VideoPreview } from "@/components/VideoPreview";
 import BrandPreview from "@/components/BrandPreview";
 import SceneTimeline, { Scene } from "@/components/SceneTimeline";
@@ -8,17 +8,39 @@ import { stitchScenes, SceneCode } from "@/lib/scene-stitcher";
 import {
   Loader2, Wand2, Share2, Check, Download, LayoutDashboard, X,
   Globe, Sparkles, Film, Megaphone, Monitor, Presentation, Play,
+  Upload, Image, Palette, Copy, Zap, Crown, Rocket, Minimize2,
+  Flame, Laptop, Target, Shuffle, Layout,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
 const VIDEO_TYPES = [
-  { id: "product-launch", label: "Product Launch", icon: Sparkles },
+  { id: "product-launch", label: "Launch", icon: Rocket },
   { id: "feature-explainer", label: "Explainer", icon: Presentation },
-  { id: "website-hero", label: "Website Hero", icon: Monitor },
-  { id: "ad-creative", label: "Ad Creative", icon: Megaphone },
-  { id: "social-teaser", label: "Social Teaser", icon: Film },
+  { id: "website-hero", label: "Hero", icon: Monitor },
+  { id: "ad-creative", label: "Ad", icon: Megaphone },
+  { id: "social-teaser", label: "Social", icon: Film },
   { id: "general", label: "General", icon: Play },
+];
+
+const DIRECTOR_STYLES = [
+  { id: "premium", label: "Premium", icon: Crown, prompt: "Apple-like premium minimal design, clean typography, lots of whitespace, elegant transitions" },
+  { id: "startup", label: "Startup", icon: Rocket, prompt: "Fast-paced startup energy, bold gradients, dynamic text animations, modern SaaS feel" },
+  { id: "minimal", label: "Minimal", icon: Minimize2, prompt: "Ultra minimal and clean, subtle animations, thin fonts, monochrome with one accent" },
+  { id: "energetic", label: "Energetic", icon: Zap, prompt: "High energy, fast cuts, bold colors, explosive transitions, glitch effects" },
+  { id: "cinematic", label: "Cinematic", icon: Film, prompt: "Cinematic film style, letterbox bars, slow Ken Burns, dramatic lighting, vignette" },
+  { id: "playful", label: "Playful", icon: Sparkles, prompt: "Fun and playful, bouncy animations, bright colors, rounded shapes, cartoon-like" },
+];
+
+const PLATFORM_PRESETS = [
+  { id: "youtube", label: "YouTube", aspect: "16:9", duration: 30 },
+  { id: "tiktok", label: "TikTok", aspect: "9:16", duration: 15 },
+  { id: "reels", label: "Reels", aspect: "9:16", duration: 15 },
+  { id: "linkedin", label: "LinkedIn", aspect: "16:9", duration: 30 },
+  { id: "twitter", label: "X / Twitter", aspect: "16:9", duration: 15 },
+  { id: "instagram", label: "IG Post", aspect: "1:1", duration: 15 },
+  { id: "shorts", label: "YT Shorts", aspect: "9:16", duration: 30 },
+  { id: "website", label: "Website", aspect: "16:9", duration: 10 },
 ];
 
 type Step = "input" | "brand-review" | "script" | "generating" | "preview";
@@ -55,6 +77,90 @@ export default function GenerateClient() {
   const [showDownloadSuccess, setShowDownloadSuccess] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
+  // NEW: Director mode, uploads, variations, platform
+  const [directorStyle, setDirectorStyle] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<Array<{url: string; alt: string; context: string}>>([]);
+  const [uploading, setUploading] = useState(false);
+  const [variations, setVariations] = useState<any[]>([]);
+  const [generatingVariations, setGeneratingVariations] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Image Upload Handler ──
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      const imageData: Array<{data: string; name: string; type: string}> = [];
+      for (const file of Array.from(files).slice(0, 20)) {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        imageData.push({ data: base64, name: file.name, type: file.type });
+      }
+      const res = await fetch("/api/upload-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: imageData, brandKitId: brandKit?.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setUploadedImages(prev => [...prev, ...data.images]);
+      // Also add to brandKit images if it exists
+      if (brandKit) {
+        setBrandKit((prev: any) => ({
+          ...prev,
+          images: [...(prev?.images || []), ...data.images],
+        }));
+      }
+    } catch (err: any) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // ── Generate Variations ──
+  const handleGenerateVariations = async (type: string) => {
+    setGeneratingVariations(true);
+    try {
+      const res = await fetch("/api/generate-variations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, variationType: type, count: 5, brandKit }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setVariations(data.variations || []);
+    } catch (err: any) {
+      alert(`Variations failed: ${err.message}`);
+    } finally {
+      setGeneratingVariations(false);
+    }
+  };
+
+  // ── Apply Platform Preset ──
+  const applyPlatformPreset = (presetId: string) => {
+    const preset = PLATFORM_PRESETS.find(p => p.id === presetId);
+    if (preset) {
+      setAspectRatio(preset.aspect);
+      setDuration(preset.duration);
+      setSelectedPlatform(presetId);
+    }
+  };
+
+  // ── Get enhanced prompt with director style ──
+  const getEnhancedPrompt = () => {
+    let enhanced = prompt;
+    const style = DIRECTOR_STYLES.find(s => s.id === directorStyle);
+    if (style) enhanced += `\n\nSTYLE DIRECTION: ${style.prompt}`;
+    return enhanced;
+  };
+
   // ── Step 1: Extract Brand ──
   const handleExtractBrand = async () => {
     if (!websiteUrl) return;
@@ -86,7 +192,7 @@ export default function GenerateClient() {
       const res = await fetch("/api/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, videoType, duration, brandKit }),
+        body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration, brandKit }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -109,11 +215,12 @@ export default function GenerateClient() {
     for (const scene of scenes) {
       setGeneratingSceneId(scene.id);
       try {
+        const dirStyle = DIRECTOR_STYLES.find(s => s.id === directorStyle);
         const res = await fetch("/api/generate-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}`,
+            prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
             duration: scene.duration,
             aspectVideo: aspectRatio,
             brandKit,
@@ -148,7 +255,7 @@ export default function GenerateClient() {
       const res = await fetch("/api/generate-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, duration, aspectVideo: aspectRatio, brandKit }),
+        body: JSON.stringify({ prompt: getEnhancedPrompt(), duration, aspectVideo: aspectRatio, brandKit }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -372,6 +479,90 @@ export default function GenerateClient() {
                   ))}
                 </div>
               </div>
+
+              {/* AI Director Mode */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Crown className="w-3 h-3"/> Director Mode</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {DIRECTOR_STYLES.map(ds => {
+                    const Icon = ds.icon;
+                    return (
+                      <button key={ds.id} onClick={() => setDirectorStyle(directorStyle === ds.id ? null : ds.id)}
+                        className={`py-2 px-1 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all flex flex-col items-center gap-1 ${
+                          directorStyle === ds.id ? "bg-purple-500/20 border-purple-500/40 text-purple-400" : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10"
+                        }`}>
+                        <Icon size={12}/>{ds.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Platform Presets */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Layout className="w-3 h-3"/> Platform</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {PLATFORM_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => applyPlatformPreset(p.id)}
+                      className={`px-2.5 py-1.5 rounded-lg text-[8px] font-bold border transition-all ${
+                        selectedPlatform === p.id ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400" : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10"
+                      }`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Image className="w-3 h-3"/> Assets</label>
+                <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleImageUpload} className="hidden"/>
+                <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                  className="w-full py-3 rounded-xl border border-dashed border-white/20 bg-white/5 text-slate-400 text-[10px] font-bold uppercase tracking-wider hover:bg-white/10 hover:border-white/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload size={14}/>}
+                  {uploading ? "Uploading..." : "Upload Screenshots / Images"}
+                </button>
+                {uploadedImages.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {uploadedImages.map((img, i) => (
+                      <div key={i} className="relative group">
+                        <img src={img.url} alt={img.alt} className="w-10 h-10 rounded-lg object-cover border border-white/10"/>
+                        <button onClick={() => setUploadedImages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-2.5 h-2.5 text-white"/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Variations (visible when prompt exists) */}
+              {prompt && (
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Shuffle className="w-3 h-3"/> Variations</label>
+                  <div className="flex gap-1.5">
+                    {["hooks","styles","ctas","angles"].map(t => (
+                      <button key={t} onClick={() => handleGenerateVariations(t)} disabled={generatingVariations}
+                        className="flex-1 py-1.5 rounded-lg text-[7px] font-bold uppercase tracking-wider bg-white/5 border border-white/10 text-slate-500 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  {generatingVariations && <p className="text-[9px] text-purple-400/70 animate-pulse ml-1">Generating variations...</p>}
+                  {variations.length > 0 && (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-custom">
+                      {variations.map((v: any) => (
+                        <button key={v.id} onClick={() => setPrompt(prompt + "\n" + v.promptModifier)}
+                          className="w-full text-left p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+                          <p className="text-[9px] font-bold text-white">{v.name}</p>
+                          <p className="text-[8px] text-slate-500 line-clamp-1">{v.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
