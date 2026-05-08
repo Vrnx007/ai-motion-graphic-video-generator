@@ -75,9 +75,27 @@ const VideoPreviewBase = ({
 
       // ━━━ LEGACY: Transpile raw JSX → JS ━━━
       // Repair any broken/truncated scenes before transpiling
-      const repairedCode = repairStitchedCode(cleanCode);
+      let sanitizedCode = repairStitchedCode(cleanCode);
 
-      const transpiled = Babel.transform(repairedCode, {
+      // Guard against AI hallucinating un-injected Lucide icons (e.g., <Share2 />)
+      const allowedComponents = new Set([
+        "React", "AbsoluteFill", "Sequence", "Series", "Loop", "Audio", "Img", "Video", "OffthreadVideo", "MyComposition",
+        ...Array.from({length: 50}, (_, i) => `Scene${i+1}`),
+        "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity", "Monitor", "Cpu",
+        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
+        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle"
+      ]);
+
+      const usedComponents = Array.from(sanitizedCode.matchAll(/<([A-Z][a-zA-Z0-9_]*)/g)).map(m => m[1]);
+      for (const comp of usedComponents) {
+        if (!allowedComponents.has(comp)) {
+          console.warn(`[VideoPreview] Replacing hallucinated component <${comp}> with <Sparkles>`);
+          sanitizedCode = sanitizedCode.replace(new RegExp(`<${comp}(\\s|>)`, 'g'), `<Sparkles$1`);
+          sanitizedCode = sanitizedCode.replace(new RegExp(`</${comp}>`, 'g'), `</Sparkles>`);
+        }
+      }
+
+      const transpiled = Babel.transform(sanitizedCode, {
         presets: ["env", "react", "typescript"],
         filename: "composition.tsx",
       }).code;
