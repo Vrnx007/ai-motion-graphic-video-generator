@@ -4,6 +4,7 @@ import { Player } from "@remotion/player";
 import * as Babel from "@babel/standalone";
 import * as Remotion from "remotion";
 import { TemplateRegistry } from "./templates/TemplateRegistry";
+import { repairStitchedCode } from "@/lib/scene-stitcher";
 import { 
   Monitor, Cpu, Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight, Video, Database, Music, Activity,
   Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet, 
@@ -73,7 +74,10 @@ const VideoPreviewBase = ({
       }
 
       // ━━━ LEGACY: Transpile raw JSX → JS ━━━
-      const transpiled = Babel.transform(cleanCode, {
+      // Repair any broken/truncated scenes before transpiling
+      const repairedCode = repairStitchedCode(cleanCode);
+
+      const transpiled = Babel.transform(repairedCode, {
         presets: ["env", "react", "typescript"],
         filename: "composition.tsx",
       }).code;
