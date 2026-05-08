@@ -17,6 +17,31 @@ export function stitchScenes(scenes: SceneCode[]): string {
   const fps = 30;
   let currentFrame = 0;
 
+  // Check if we are using the God Templates engine (JSON)
+  const isJsonEngine = scenes.length > 0 && scenes[0].code.trim().startsWith("{");
+
+  if (isJsonEngine) {
+    const combinedJson = scenes.map((scene) => {
+      const durationInFrames = scene.duration * fps;
+      const fromFrame = currentFrame;
+      currentFrame += durationInFrames;
+
+      try {
+        const parsed = JSON.parse(scene.code);
+        return {
+          ...parsed,
+          durationInFrames,
+          fromFrame,
+        };
+      } catch (e) {
+        return null;
+      }
+    }).filter(Boolean);
+
+    return JSON.stringify({ type: "template_sequence", sequences: combinedJson });
+  }
+
+  // Legacy Generative Code engine (Raw React)
   const sceneBlocks = scenes.map((scene, index) => {
     const durationInFrames = scene.duration * fps;
     const fromFrame = currentFrame;

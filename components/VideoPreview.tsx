@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Player } from "@remotion/player";
 import * as Babel from "@babel/standalone";
 import * as Remotion from "remotion";
+import { TemplateRegistry } from "./templates/TemplateRegistry";
 import { 
   Monitor, Cpu, Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight, Video, Database, Music, Activity,
   Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet, 
@@ -34,18 +35,47 @@ const VideoPreviewBase = ({
     setError(null);
 
     try {
-      // 🔹 1. Clean AI code (VERY IMPORTANT)
+      // Clean code first
       const cleanCode = code
         .replace(/^import\s+.*$/gm, "")
         .replace(/export\s+default\s+/g, "")
-        .replace(/```[a-z]*\n/g, "")
+        .replace(/```(?:json|jsx?|tsx?)?\n/g, "")
         .replace(/```/g, "")
         .trim();
 
-      // 🔹 2. Transpile JSX → JS
+      // ━━━ NEW: Check for JSON Template Configuration ━━━
+      if (cleanCode.startsWith("{")) {
+        const parsed = JSON.parse(cleanCode);
+
+        if (parsed.type === "template") {
+          setComponent(() => (props: any) => (
+            <TemplateRegistry templateName={parsed.templateName} props={parsed.props} />
+          ));
+          setIsTranspiling(false);
+          return;
+        }
+
+        if (parsed.type === "template_sequence" && parsed.sequences) {
+          const { AbsoluteFill, Audio, Sequence } = Remotion;
+          setComponent(() => (props: any) => (
+            <AbsoluteFill style={{ backgroundColor: "#000" }}>
+              <Audio src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" volume={0.5} />
+              {parsed.sequences.map((seq: any, i: number) => (
+                <Sequence key={i} from={seq.fromFrame} durationInFrames={seq.durationInFrames}>
+                  <TemplateRegistry templateName={seq.templateName} props={seq.props} />
+                </Sequence>
+              ))}
+            </AbsoluteFill>
+          ));
+          setIsTranspiling(false);
+          return;
+        }
+      }
+
+      // ━━━ LEGACY: Transpile raw JSX → JS ━━━
       const transpiled = Babel.transform(cleanCode, {
         presets: ["env", "react", "typescript"],
-        filename: "composition.tsx", // Required for the typescript preset to trigger
+        filename: "composition.tsx",
       }).code;
 
       // 🔹 3. Extract ONLY allowed Remotion functions (safe)

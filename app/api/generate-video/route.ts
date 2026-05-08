@@ -66,7 +66,49 @@ Generate ONLY this single scene — it will be stitched with others.
 `;
     }
 
-    const systemPrompt = `
+    const useGodTemplates = process.env.USE_GOD_TEMPLATES === "true";
+
+    let systemPrompt = "";
+
+    if (useGodTemplates) {
+      // ━━━ NEW: PARAMETRIC TEMPLATE ENGINE (JSON) ━━━
+      systemPrompt = `
+You are an elite motion design Creative Director.
+Your task is to select the perfect high-end video template and configure its props based on the user's request and brand identity.
+
+AVAILABLE TEMPLATES:
+1. "KineticHero" - Giant typography, fast dynamic cuts, background image zoom. Good for bold hooks and intros.
+   Props: { headline (string, 1-4 words max), subheadline (string), imageUrl (string, optional) }
+2. "BentoGrid" - Apple-style product feature showcase with 3D tilts and grid layout. Good for features and demos.
+   Props: { headline (string), features (array of 3 short strings), images (array of up to 3 image URLs, optional) }
+
+${brandBlock}
+${sceneBlock}
+
+USER REQUEST:
+Prompt: ${prompt}
+Duration: ${duration} seconds
+
+RULES:
+1. Analyze the scene type and prompt. Choose either "KineticHero" or "BentoGrid".
+2. Extract the best copy from the brand or prompt. KEEP TEXT EXTREMELY SHORT.
+3. If brand images are available, assign their URLs to the imageUrl or images props.
+4. Output EXACTLY valid JSON, nothing else. No markdown.
+
+OUTPUT FORMAT:
+{
+  "type": "template",
+  "templateName": "KineticHero", 
+  "props": {
+    "headline": "...",
+    "subheadline": "...",
+    "imageUrl": "..."
+  }
+}
+      `;
+    } else {
+      // ━━━ LEGACY: GENERATIVE CODE ENGINE (RAW REACT) ━━━
+      systemPrompt = `
 You are a world-class Remotion + React motion-graphics engineer.
 Your single task is to output a COMPLETE, RUNNABLE React component that produces a stunning, professional video.
 
@@ -163,18 +205,50 @@ Duration : ${duration} seconds (= ${duration * 30} frames at 30 fps)
 Aspect   : ${aspectVideo}
 
 Now generate the best possible, fully animated, production-quality MyComposition component.
-    `;
+      `;
+    }
 
     const result = await model.generateContent(systemPrompt);
     const response = await result.response;
     let text = response.text();
 
     const cleanCode = text
-      .replace(/^```(?:jsx?|tsx?|javascript|typescript)?\s*\n?/gim, "")
+      .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
       .replace(/\n?```\s*$/gim, "")
       .trim();
 
     console.log("Generated Code Length:", cleanCode.length);
+
+    // If using God Templates, parse the JSON and inject brand colors
+    if (useGodTemplates) {
+      try {
+        const parsed = JSON.parse(cleanCode);
+        // Inject brand colors into props so templates can use them
+        parsed.props = {
+          ...parsed.props,
+          primaryColor: brandKit?.colors?.primary || "#3B82F6",
+          secondaryColor: brandKit?.colors?.secondary || "#7C3AED",
+          backgroundColor: brandKit?.colors?.background || "#0F172A",
+          textColor: brandKit?.colors?.text || "#FFFFFF",
+          fontFamily: brandKit?.fonts?.heading || "Inter",
+        };
+        // Return stringified JSON as videoCode
+        return NextResponse.json({ videoCode: JSON.stringify(parsed), duration });
+      } catch (e) {
+        console.error("Failed to parse God Template JSON:", e);
+        // Fallback to simple error template
+        const fallbackJSON = {
+          type: "template",
+          templateName: "KineticHero",
+          props: {
+            headline: "Error Parsing JSON",
+            subheadline: "The AI returned invalid format.",
+            primaryColor: "#ef4444", backgroundColor: "#000", textColor: "#fff", fontFamily: "Inter"
+          }
+        };
+        return NextResponse.json({ videoCode: JSON.stringify(fallbackJSON), duration });
+      }
+    }
 
     return NextResponse.json({ videoCode: cleanCode, duration });
 
