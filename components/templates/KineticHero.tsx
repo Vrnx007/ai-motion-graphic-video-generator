@@ -3,7 +3,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate, Img
 
 export interface KineticHeroProps {
   headline: string;
-  subheadline: string;
+  subheadline?: string;
   primaryColor: string;
   secondaryColor?: string;
   backgroundColor: string;
@@ -12,59 +12,29 @@ export interface KineticHeroProps {
   imageUrl?: string;
 }
 
-// Floating particle component
-const Particle: React.FC<{
-  index: number; frame: number; fps: number; color: string; durationInFrames: number;
-}> = ({ index, frame, fps, color, durationInFrames }) => {
+// Animated geometric shape
+const GeoShape: React.FC<{
+  index: number; frame: number; durationInFrames: number; color: string;
+}> = ({ index, frame, durationInFrames, color }) => {
   const seed = index * 7;
-  const x = random(seed) * 100;
-  const startY = 100 + random(seed + 1) * 20;
-  const size = 2 + random(seed + 2) * 4;
-  const speed = 0.3 + random(seed + 3) * 0.7;
-  const delay = random(seed + 4) * 40;
-  const opacity = 0.1 + random(seed + 5) * 0.3;
-
-  const progress = interpolate(frame - delay, [0, durationInFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const y = interpolate(progress, [0, 1], [startY, -20]);
-  const fadeIn = interpolate(progress, [0, 0.1, 0.8, 1], [0, opacity, opacity, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-
-  return (
-    <div style={{
-      position: "absolute",
-      left: `${x}%`,
-      top: `${y}%`,
-      width: size,
-      height: size,
-      borderRadius: "50%",
-      backgroundColor: color,
-      opacity: fadeIn,
-      filter: `blur(${size > 4 ? 1 : 0}px)`,
-    }} />
-  );
-};
-
-// Animated gradient orb
-const GradientOrb: React.FC<{
-  x: string; y: string; size: string; color1: string; color2: string;
-  frame: number; durationInFrames: number; delay?: number;
-}> = ({ x, y, size, color1, color2, frame, durationInFrames, delay = 0 }) => {
-  const breathe = interpolate(
-    frame - delay,
-    [0, durationInFrames * 0.5, durationInFrames],
-    [1, 1.3, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
-  const opacity = interpolate(frame - delay, [0, 20, durationInFrames - 20, durationInFrames], [0, 0.4, 0.4, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const size = 30 + random(seed) * 120;
+  const x = random(seed + 1) * 100;
+  const y = random(seed + 2) * 100;
+  const rotation = interpolate(frame, [0, durationInFrames], [random(seed + 3) * 360, random(seed + 3) * 360 + 180]);
+  const drift = interpolate(frame, [0, durationInFrames], [0, -80 - random(seed + 4) * 80]);
+  const fadeIn = interpolate(frame, [0, 15, durationInFrames - 15, durationInFrames], [0, 0.08 + random(seed + 5) * 0.12, 0.08, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const shapes = ["0%", "30%", "50%"]; // square, rounded, circle
+  const borderRadius = shapes[Math.floor(random(seed + 6) * 3)];
+  const scale = interpolate(frame, [0, durationInFrames * 0.5, durationInFrames], [0.6, 1.2, 0.8]);
 
   return (
     <div style={{
-      position: "absolute", left: x, top: y,
+      position: "absolute", left: `${x}%`, top: `${y}%`,
       width: size, height: size,
-      borderRadius: "50%",
-      background: `radial-gradient(circle, ${color1}, ${color2}, transparent)`,
-      filter: "blur(80px)",
-      transform: `scale(${breathe})`,
-      opacity,
+      borderRadius, border: `1.5px solid ${color}`,
+      opacity: fadeIn,
+      transform: `translateY(${drift}px) rotate(${rotation}deg) scale(${scale})`,
+      background: random(seed + 7) > 0.7 ? `${color}08` : "transparent",
     }} />
   );
 };
@@ -76,90 +46,101 @@ export const KineticHero: React.FC<KineticHeroProps> = ({
   const { fps, durationInFrames, width, height } = useVideoConfig();
   const secondary = secondaryColor || primaryColor;
 
-  // Background subtle zoom
-  const bgScale = interpolate(frame, [0, durationInFrames], [1.15, 1.0], { extrapolateRight: "clamp" });
-
-  // Split headline by words
   const words = (headline || "").split(" ");
 
-  // Line under headline
-  const lineWidth = interpolate(
-    spring({ frame: frame - (words.length * 3 + 5), fps, config: { damping: 15, stiffness: 80 } }),
-    [0, 1], [0, 100]
-  );
+  // Continuous background motion
+  const orbX = interpolate(frame, [0, durationInFrames], [20, 60]);
+  const orbY = interpolate(frame, [0, durationInFrames], [30, 50]);
+  const orb2X = interpolate(frame, [0, durationInFrames], [70, 30]);
 
-  // CTA button reveal
-  const ctaProgress = spring({ frame: frame - (words.length * 3 + 20), fps, config: { damping: 12 } });
-  const ctaY = interpolate(ctaProgress, [0, 1], [40, 0]);
-  const ctaOpacity = interpolate(ctaProgress, [0, 0.5, 1], [0, 0, 1]);
+  // Image continuous zoom
+  const imgZoom = interpolate(frame, [0, durationInFrames], [1.2, 1.0], { extrapolateRight: "clamp" });
+  const imgPanX = interpolate(frame, [0, durationInFrames], [-3, 3]);
+
+  // Text exit animation (last 20% of duration)
+  const exitStart = durationInFrames * 0.75;
+  const exitProgress = interpolate(frame, [exitStart, durationInFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ backgroundColor, fontFamily: `'${fontFamily}', Inter, sans-serif`, overflow: "hidden" }}>
 
-      {/* Gradient Orbs */}
-      <GradientOrb x="-10%" y="-10%" size="60%" color1={`${primaryColor}55`} color2="transparent" frame={frame} durationInFrames={durationInFrames} />
-      <GradientOrb x="60%" y="50%" size="50%" color1={`${secondary}44`} color2="transparent" frame={frame} durationInFrames={durationInFrames} delay={10} />
-      <GradientOrb x="30%" y="-20%" size="40%" color1={`${primaryColor}22`} color2="transparent" frame={frame} durationInFrames={durationInFrames} delay={20} />
+      {/* Moving gradient orbs — continuous */}
+      <div style={{
+        position: "absolute", left: `${orbX}%`, top: `${orbY}%`,
+        width: "50%", height: "50%", borderRadius: "50%",
+        background: `radial-gradient(circle, ${primaryColor}30, transparent)`,
+        filter: "blur(80px)", transform: "translate(-50%, -50%)",
+      }} />
+      <div style={{
+        position: "absolute", left: `${orb2X}%`, top: "60%",
+        width: "40%", height: "40%", borderRadius: "50%",
+        background: `radial-gradient(circle, ${secondary}25, transparent)`,
+        filter: "blur(60px)", transform: "translate(-50%, -50%)",
+      }} />
 
-      {/* Background Image with Ken Burns */}
+      {/* Background image — continuously panning */}
       {imageUrl && (
         <AbsoluteFill>
-          <Img
-            src={imageUrl}
-            style={{
-              width: "100%", height: "100%", objectFit: "cover",
-              transform: `scale(${bgScale})`,
-              filter: "brightness(0.3) saturate(1.2)",
-            }}
-          />
-          {/* Gradient overlay */}
+          <Img src={imageUrl} style={{
+            width: "110%", height: "110%", objectFit: "cover",
+            transform: `scale(${imgZoom}) translateX(${imgPanX}%)`,
+            filter: "brightness(0.25) saturate(1.3)",
+          }} />
           <AbsoluteFill style={{
-            background: `linear-gradient(135deg, ${backgroundColor}ee 0%, ${backgroundColor}88 50%, ${backgroundColor}cc 100%)`
+            background: `linear-gradient(135deg, ${backgroundColor}dd 0%, transparent 50%, ${backgroundColor}cc 100%)`
           }} />
         </AbsoluteFill>
       )}
 
-      {/* Grid pattern overlay */}
-      <AbsoluteFill style={{
-        backgroundImage: `linear-gradient(${textColor}08 1px, transparent 1px), linear-gradient(90deg, ${textColor}08 1px, transparent 1px)`,
-        backgroundSize: "60px 60px",
-        opacity: interpolate(frame, [0, 30], [0, 0.5], { extrapolateRight: "clamp" }),
-      }} />
-
-      {/* Floating particles */}
-      {Array.from({ length: 30 }).map((_, i) => (
-        <Particle key={i} index={i} frame={frame} fps={fps} color={primaryColor} durationInFrames={durationInFrames} />
+      {/* Animated geometric shapes — move throughout entire scene */}
+      {Array.from({ length: 15 }).map((_, i) => (
+        <GeoShape key={i} index={i} frame={frame} durationInFrames={durationInFrames} color={primaryColor} />
       ))}
 
-      {/* Content */}
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "flex-start", padding: "8% 10%" }}>
+      {/* Floating particles — continuous */}
+      {Array.from({ length: 40 }).map((_, i) => {
+        const seed = i * 11 + 100;
+        const px = random(seed) * 100;
+        const startY = 110;
+        const speed = 0.5 + random(seed + 1) * 1;
+        const pSize = 1 + random(seed + 2) * 4;
+        const yPos = interpolate(frame, [0, durationInFrames], [startY, startY - speed * 150]);
+        const wobble = Math.sin((frame + random(seed + 3) * 100) * 0.05) * 10;
+        const pOpacity = interpolate(frame, [0, 10, durationInFrames - 10, durationInFrames], [0, 0.15 + random(seed + 4) * 0.2, 0.15, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        return (
+          <div key={i} style={{
+            position: "absolute", left: `${px}%`, top: `${yPos}%`,
+            width: pSize, height: pSize, borderRadius: "50%",
+            backgroundColor: random(seed + 5) > 0.5 ? primaryColor : secondary,
+            opacity: pOpacity,
+            transform: `translateX(${wobble}px)`,
+            boxShadow: pSize > 3 ? `0 0 ${pSize * 2}px ${primaryColor}44` : "none",
+          }} />
+        );
+      })}
 
-        {/* Kinetic Headline — word by word reveal with clip mask */}
-        <div style={{ marginBottom: 30 }}>
+      {/* Content — with exit animation */}
+      <AbsoluteFill style={{
+        justifyContent: "center", alignItems: "flex-start", padding: "8% 10%",
+        opacity: interpolate(exitProgress, [0, 1], [1, 0]),
+        transform: `translateY(${interpolate(exitProgress, [0, 1], [0, -40])}px)`,
+      }}>
+        {/* Headline — word by word */}
+        <div style={{ marginBottom: 24 }}>
           {words.map((word, i) => {
-            const wordSpring = spring({
-              frame: frame - (i * 4),
-              fps,
-              config: { damping: 16, stiffness: 140, mass: 1.2 }
-            });
-            const yVal = interpolate(wordSpring, [0, 1], [120, 0]);
-            const opacityVal = interpolate(wordSpring, [0, 0.3, 1], [0, 0, 1]);
-            const scaleVal = interpolate(wordSpring, [0, 1], [0.8, 1]);
-            const isHighlight = i === words.length - 1 || i === 0;
-
+            const ws = spring({ frame: frame - (i * 4), fps, config: { damping: 16, stiffness: 140, mass: 1.2 } });
+            const yVal = interpolate(ws, [0, 1], [100, 0]);
+            const opVal = interpolate(ws, [0, 0.3, 1], [0, 0, 1]);
+            const isHL = i === words.length - 1;
             return (
               <div key={i} style={{ overflow: "hidden", display: "inline-block", marginRight: "0.3em" }}>
                 <span style={{
                   display: "inline-block",
-                  fontSize: Math.min(width * 0.08, 120),
-                  fontWeight: 900,
-                  color: isHighlight ? primaryColor : textColor,
-                  lineHeight: 1.1,
-                  textTransform: "uppercase",
-                  letterSpacing: "-0.03em",
-                  transform: `translateY(${yVal}px) scale(${scaleVal})`,
-                  opacity: opacityVal,
-                  textShadow: isHighlight ? `0 0 40px ${primaryColor}66` : "none",
+                  fontSize: Math.min(width * 0.075, 110),
+                  fontWeight: 900, color: isHL ? primaryColor : textColor,
+                  lineHeight: 1.05, textTransform: "uppercase", letterSpacing: "-0.03em",
+                  transform: `translateY(${yVal}px)`, opacity: opVal,
+                  textShadow: isHL ? `0 0 40px ${primaryColor}55` : "none",
                 }}>
                   {word}
                 </span>
@@ -168,49 +149,22 @@ export const KineticHero: React.FC<KineticHeroProps> = ({
           })}
         </div>
 
-        {/* Animated accent line */}
-        <div style={{
-          width: `${lineWidth}%`, maxWidth: 300, height: 4,
-          background: `linear-gradient(90deg, ${primaryColor}, ${secondary})`,
-          borderRadius: 2, marginBottom: 30,
-          boxShadow: `0 0 20px ${primaryColor}66`,
-        }} />
-
-        {/* Subheadline with glassmorphism card */}
+        {/* Short subheadline */}
         {subheadline && (
-          <div style={{
-            overflow: "hidden",
-            opacity: interpolate(
-              spring({ frame: frame - (words.length * 4 + 8), fps, config: { damping: 14 } }),
-              [0, 1], [0, 1]
-            ),
-            transform: `translateY(${interpolate(
-              spring({ frame: frame - (words.length * 4 + 8), fps, config: { damping: 14 } }),
-              [0, 1], [30, 0]
-            )}px)`,
+          <p style={{
+            fontSize: Math.min(width * 0.02, 26), fontWeight: 400,
+            color: textColor, opacity: interpolate(spring({ frame: frame - (words.length * 4 + 10), fps, config: { damping: 14 } }), [0, 0.3, 1], [0, 0, 0.7]),
+            margin: 0, maxWidth: "50%", lineHeight: 1.5,
+            transform: `translateY(${interpolate(spring({ frame: frame - (words.length * 4 + 10), fps, config: { damping: 14 } }), [0, 1], [20, 0])}px)`,
           }}>
-            <div style={{
-              background: `${textColor}08`,
-              backdropFilter: "blur(20px)",
-              border: `1px solid ${textColor}15`,
-              borderRadius: 16, padding: "20px 28px",
-              maxWidth: "55%",
-            }}>
-              <p style={{
-                fontSize: Math.min(width * 0.022, 28),
-                fontWeight: 400, color: textColor, margin: 0,
-                lineHeight: 1.6, opacity: 0.85,
-              }}>
-                {subheadline}
-              </p>
-            </div>
-          </div>
+            {subheadline}
+          </p>
         )}
       </AbsoluteFill>
 
-      {/* Scan line effect */}
+      {/* Scan lines */}
       <AbsoluteFill style={{
-        background: `repeating-linear-gradient(0deg, transparent, transparent 2px, ${textColor}03 2px, ${textColor}03 4px)`,
+        background: `repeating-linear-gradient(0deg, transparent, transparent 3px, ${textColor}02 3px, ${textColor}02 4px)`,
         pointerEvents: "none",
       }} />
     </AbsoluteFill>
