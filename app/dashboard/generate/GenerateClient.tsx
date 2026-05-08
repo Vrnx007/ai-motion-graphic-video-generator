@@ -212,6 +212,14 @@ export default function GenerateClient() {
     setStep("generating");
     const sceneCodes: SceneCode[] = [];
 
+    const cleanAiCode = (raw: string) => {
+      return raw
+        .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
+        .replace(/\n?```\s*$/gim, "")
+        .replace(/^(Here is the code:|This is the code:|Certainly!|Sure, here is).*$/gim, "")
+        .trim();
+    };
+
     for (const scene of scenes) {
       setGeneratingSceneId(scene.id);
       try {
@@ -229,12 +237,14 @@ export default function GenerateClient() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        sceneCodes.push({ id: scene.id, code: data.videoCode, duration: scene.duration });
+        
+        const safeCode = cleanAiCode(data.videoCode);
+        sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
       } catch (err: any) {
         console.error(`Scene ${scene.id} failed:`, err);
         sceneCodes.push({
           id: scene.id,
-          code: `const MyComposition = () => { const frame = useCurrentFrame(); return (<AbsoluteFill style={{background:'#0F172A',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'white',fontSize:40,fontWeight:'bold',opacity:interpolate(frame,[0,15],[0,1],{extrapolateRight:'clamp'})}}>${scene.text}</div></AbsoluteFill>); };`,
+          code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
           duration: scene.duration,
         });
       }
@@ -255,6 +265,14 @@ export default function GenerateClient() {
     setLoading(true);
     setVideoCode("");
     try {
+      const cleanAiCode = (raw: string) => {
+        return raw
+          .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
+          .replace(/\n?```\s*$/gim, "")
+          .replace(/^(Here is the code:|This is the code:|Certainly!|Sure, here is).*$/gim, "")
+          .trim();
+      };
+
       // If duration is long, we MUST use scene-based generation to avoid AI truncation
       if (duration > 20) {
         console.log("Long duration detected. Using auto-scripting workflow...");
@@ -288,7 +306,9 @@ export default function GenerateClient() {
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
-          sceneCodes.push({ id: scene.id, code: data.videoCode, duration: scene.duration });
+          
+          const safeCode = cleanAiCode(data.videoCode);
+          sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
         }
         
         setGeneratingSceneId(null);
@@ -305,10 +325,12 @@ export default function GenerateClient() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        setVideoCode(data.videoCode);
+        
+        const safeCode = cleanAiCode(data.videoCode);
+        setVideoCode(safeCode);
         if (data.duration) setDuration(data.duration);
         setStep("preview");
-        autoSaveProject(data.videoCode, data.duration || duration);
+        autoSaveProject(safeCode, data.duration || duration);
       }
     } catch (err: any) {
       alert(`Generation failed: ${err.message}`);
