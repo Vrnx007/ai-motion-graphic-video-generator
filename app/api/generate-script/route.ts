@@ -2,9 +2,36 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+const MODEL_CHAIN = ["gemini-2.5-flash-preview-05-20", "gemini-2.0-flash"];
+
+async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string> {
+  for (const modelName of MODEL_CHAIN) {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`[generate-script] Trying ${modelName} (attempt ${attempt + 1})`);
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      } catch (err: any) {
+        const status = err?.status || err?.httpStatusCode || 0;
+        const isRetryable = status === 503 || status === 429 || err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("high demand") || err?.message?.includes("RESOURCE_EXHAUSTED");
+        if (isRetryable && attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.log(`[generate-script] ${modelName} returned ${status}, retrying in ${Math.round(delay)}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        if (isRetryable) { break; }
+        throw err;
+      }
+    }
+  }
+  throw new Error("All AI models are currently overloaded. Please try again in a minute.");
+}
 
 export interface Scene {
   id: number;
@@ -44,7 +71,7 @@ export async function POST(req: Request) {
     const targetDuration = Math.max(Number(duration) || 30, 5);
     const sceneCount = getSceneCount(targetDuration);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
 
     // Build brand context if available
     let brandContext = "";
@@ -207,9 +234,7 @@ ${images.map((img: any, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt
       "}",
     ].join("\n");
 
-    const result = await model.generateContent(systemPrompt);
-    const response = await result.response;
-    let text = response.text();
+    let text = await generateWithRetry(systemPrompt);
 
     // Clean up Gemini output
     text = text

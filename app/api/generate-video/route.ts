@@ -1,22 +1,50 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+// Models in priority order — falls back if primary is overloaded
+const MODEL_CHAIN = ["gemini-2.5-flash-preview-05-20", "gemini-2.0-flash"];
+
+async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string> {
+  for (const modelName of MODEL_CHAIN) {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: { maxOutputTokens: 8192 },
+    });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`[generate-video] Trying ${modelName} (attempt ${attempt + 1})`);
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      } catch (err: any) {
+        const status = err?.status || err?.httpStatusCode || 0;
+        const isRetryable = status === 503 || status === 429 || err?.message?.includes("503") || err?.message?.includes("429") || err?.message?.includes("high demand") || err?.message?.includes("RESOURCE_EXHAUSTED");
+        if (isRetryable && attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.log(`[generate-video] ${modelName} returned ${status}, retrying in ${Math.round(delay)}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        if (isRetryable) {
+          console.log(`[generate-video] ${modelName} exhausted retries, trying next model...`);
+          break; // try next model
+        }
+        throw err; // non-retryable error
+      }
+    }
+  }
+  throw new Error("All AI models are currently overloaded. Please try again in a minute.");
+}
 
 export async function POST(req: Request) {
   try {
     const { prompt, duration: rawDuration, aspectVideo, brandKit, scene } = await req.json();
 
     const duration = Math.min(Math.max(Number(rawDuration) || 10, 3), 300);
-
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash-preview",
-      generationConfig: {
-        maxOutputTokens: 8192,
-      }
-    });
 
     // Build brand injection block
     let brandBlock = "";
@@ -433,9 +461,7 @@ OUTPUT FORMAT:
       systemPrompt = promptParts.join("\n");
     }
 
-    const result = await model.generateContent(systemPrompt);
-    const response = await result.response;
-    let text = response.text();
+    let text = await generateWithRetry(systemPrompt);
 
     const cleanCode = text
       .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
