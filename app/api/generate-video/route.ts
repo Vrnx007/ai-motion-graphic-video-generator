@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
       brandBlock = `
 
-BRAND IDENTITY  USE THESE EXACTLY
+BRAND IDENTITY — USE THESE EXACTLY
 
 Company Name: ${brandKit.headline || brandKit.name || ""}
 Tagline: ${brandKit.subheadline || ""}
@@ -44,24 +44,15 @@ Primary Color: ${brandKit.colors?.primary || "#3B82F6"}
 Secondary Color: ${brandKit.colors?.secondary || "#7C3AED"}
 Accent Color: ${brandKit.colors?.accent || "#06B6D4"}
 Full Palette: [${(brandKit.brandPalette || []).map((c: string) => `"${c}"`).join(", ")}]
-Background: #FFFFFF (white  clean and professional)
-Text Color: #1A1A2E (dark navy on white)
 Font Family: "${brandKit.fonts?.heading || "Inter"}"
 Motion Style: ${brandKit.style || "modern"} / ${brandKit.tone || "professional"}
 CTA Text: "${brandKit.cta || "Get Started"}"
 Logo URL: ${proxiedLogo}
 
-BRAND IMAGES  THESE ARE PROXIED AND WILL RENDER. Use <Img> component:
+BRAND IMAGES — THESE ARE PROXIED AND WILL RENDER. Use <Img> component:
 ${proxiedImages.length > 0 ? proxiedImages.map((img: any, i: number) =>
-  `  Image ${i + 1}: "${img.url}"  ${img.alt || img.context || "brand visual"}`
-).join("\n") : "  No brand images available  use abstract/geometric visuals instead"}
-
-RULES FOR BRAND:
- Use the EXACT brand colors above  NOT random blue/purple.
- If logo URL exists, display it: <Img src="${proxiedLogo}" style={{width:100,height:100,objectFit:"contain"}} />
- If brand images exist, USE THEM. They are PROXIED and guaranteed to load.
- Apply the brand's font: fontFamily: '${brandKit.fonts?.heading || "Inter"}, sans-serif'
- Match the brand's tone: ${brandKit.tone || "professional"}
+  `  Image ${i + 1}: "${img.url}" — ${img.alt || img.context || "brand visual"}`
+).join("\n") : "  No brand images available — use abstract/geometric visuals instead"}
 `;
     }
 
@@ -80,10 +71,10 @@ Scene Type: ${scene.type}
 Scene Title: ${scene.title}
 On-Screen Text: "${scene.text}"
 Visual Direction: ${scene.visual}
-${sceneImgUrl ? `Featured Image: "${sceneImgUrl}"  this URL is PROXIED and will load. Make it the HERO of this scene: <Img src="${sceneImgUrl}" style={{width:"100%",height:"100%",objectFit:"cover"}} />` : ""}
+${sceneImgUrl ? `Featured Image URL (PROXIED — will load): "${sceneImgUrl}"` : ""}
 Duration: ${duration} seconds (${duration * 30} frames)
 
-Generate ONLY this single scene  it will be stitched with others.
+Generate ONLY this single scene — it will be stitched with others.
 `;
     }
 
@@ -98,27 +89,27 @@ You are an elite motion design Creative Director.
 Your task is to select the perfect high-end video template and configure its props based on the user's request and brand identity.
 
 AVAILABLE TEMPLATES:
-1. "KineticHero"  Giant kinetic typography with word-by-word reveals, floating particles, gradient orbs.
+1. "KineticHero" — Giant kinetic typography with word-by-word reveals, floating particles, gradient orbs.
    Best for: hook, intro, bold statements, opening scenes.
    Props: { headline (string, 2-5 impactful words), subheadline (string, 1-2 sentences), imageUrl (string, optional background image) }
 
-2. "BentoGrid"  Apple-style grid of glassmorphism feature cards with staggered 3D scale reveals.
+2. "BentoGrid" — Apple-style grid of glassmorphism feature cards with staggered 3D scale reveals.
    Best for: features, demo, solution, product overview.
    Props: { headline (string), features (array of 3-4 short feature names), images (array of up to 4 image URLs) }
 
-3. "FeatureShowcase"  Full-screen hero image with glassmorphism text overlay at bottom, Ken Burns zoom.
+3. "FeatureShowcase" — Full-screen hero image with glassmorphism text overlay at bottom, Ken Burns zoom.
    Best for: demo, solution, product screenshots, visual proof.
-   Props: { headline (string, key benefit or feature), subheadline (string, optional detail), imageUrl (string, REQUIRED  the hero image) }
+   Props: { headline (string, key benefit or feature), subheadline (string, optional detail), imageUrl (string, REQUIRED — the hero image) }
 
-4. "SplitScreen"  Left text / right image layout with slide-in panels and animated divider.
+4. "SplitScreen" — Left text / right image layout with slide-in panels and animated divider.
    Best for: problem, solution, comparison, before/after.
    Props: { headline (string, bold claim), subheadline (string, supporting detail), imageUrl (string, optional product image) }
 
-5. "StatCounter"  Animated odometer-style number counters in glassmorphism cards with glow effects.
+5. "StatCounter" — Animated odometer-style number counters in glassmorphism cards with glow effects.
    Best for: social-proof, metrics, trust signals.
    Props: { headline (string, optional section title), stats (array of {value: "10K+", label: "Active Users"}, up to 4 items) }
 
-6. "LogoReveal"  Cinematic logo entrance with expanding rings, particles, and CTA button.
+6. "LogoReveal" — Cinematic logo entrance with expanding rings, particles, and CTA button.
    Best for: intro, outro, CTA, brand reveal.
    Props: { headline (string, brand or CTA headline), subheadline (string, optional), ctaText (string, optional button text), imageUrl (string, logo URL) }
 
@@ -128,16 +119,16 @@ ${sceneBlock}
 USER REQUEST:
 Prompt: ${prompt}
 Duration: ${duration} seconds
-${scene?.templateName ? `REQUESTED TEMPLATE: "${scene.templateName}"  YOU MUST use this template.` : ""}
+${scene?.templateName ? `REQUESTED TEMPLATE: "${scene.templateName}" — YOU MUST use this template.` : ""}
 
 TEMPLATE SELECTION GUIDE:
-- hook / intro  KineticHero or LogoReveal
-- problem  SplitScreen
-- solution / demo  FeatureShowcase or SplitScreen
-- features  BentoGrid
-- social-proof  StatCounter
-- cta / outro  LogoReveal
-- general  KineticHero
+- hook / intro → KineticHero or LogoReveal
+- problem → SplitScreen
+- solution / demo → FeatureShowcase or SplitScreen
+- features → BentoGrid
+- social-proof → StatCounter
+- cta / outro → LogoReveal
+- general → KineticHero
 
 RULES:
 1. ${scene?.templateName ? `Use the template "${scene.templateName}" as instructed.` : "Choose the BEST template for the scene type and content."}
@@ -155,173 +146,243 @@ OUTPUT FORMAT:
       `;
     } else {
       //  LEGACY: GENERATIVE CODE ENGINE (RAW REACT) 
-      systemPrompt = `
-You are a WORLD-CLASS motion graphics designer at a top creative agency (Buck, ManvsMachine, Ordinary Folk).
-You create STUNNING, VISUALLY RICH motion graphics using React + Remotion.
+      
+      // Build the color/style context
+      const primaryColor = brandKit?.colors?.primary || "#3B82F6";
+      const secondaryColor = brandKit?.colors?.secondary || brandKit?.colors?.primary || "#7C3AED";
+      const fontFamily = brandKit?.fonts?.heading || "Inter";
+      
+      // Build image instructions
+      let imageInstructions = "";
+      if (brandKit?.images?.length > 0) {
+        const pImages = brandKit.images.map((img: any) => ({
+          ...img,
+          url: `/api/image-proxy?url=${encodeURIComponent(img.url)}`,
+        }));
+        imageInstructions = [
+          "",
+          "BRAND IMAGES (PROXIED — guaranteed to load):",
+          ...pImages.map((img: any, i: number) => `  Image ${i + 1}: "${img.url}" — ${img.alt || img.context || "brand visual"}`),
+          "",
+          "HOW TO USE IMAGES:",
+          "- Display as HERO VISUAL with device-frame treatment (rounded corners, shadow, border)",
+          "- NEVER stretch to 100% width/height. Use max 80% width, centered.",
+          "- Add premium shadow: boxShadow: '0 40px 80px rgba(0,0,0,0.5)'",
+          "- Add border: border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20",
+          "- Animate with spring entrance (scale 0.85→1) + subtle continuous float",
+          "- Place text BELOW or BESIDE the image, NEVER on top of it",
+          "",
+        ].join("\n");
+      }
+      
+      let logoInstructions = "";
+      if (brandKit?.logoUrl) {
+        const proxiedLogo = `/api/image-proxy?url=${encodeURIComponent(brandKit.logoUrl)}`;
+        logoInstructions = [
+          "",
+          `LOGO (PROXIED): "${proxiedLogo}"`,
+          "- Show in FIRST and LAST scene",
+          "- Size: 48-80px, objectFit: 'contain'",
+          "- Animate: spring scale from 0 → 1",
+          "- NEVER make the logo larger than 80px",
+          "",
+        ].join("\n");
+      }
 
-YOUR OUTPUT IS 90% VISUAL, 10% TEXT.
-Think: animated geometric shapes, floating particles, morphing blobs, icon animations, gradient waves,
-glassmorphism panels, kinetic typography, 3D parallax layers, pulsing rings, orbiting dots,
-grid patterns, noise textures, light rays, lens flares  NOT PowerPoint slides with text.
-
-
-HARD OUTPUT RULES
-
- Start EXACTLY with: const MyComposition = () => {
- Do NOT write any import statements.
- Do NOT write export default.
- Do NOT wrap in markdown fences.
- Use only the APIs listed below.
-
-
-AVAILABLE APIs
-
-Remotion (pre-injected, use directly):
-  useCurrentFrame, useVideoConfig, spring, interpolate, interpolateColors,
-  AbsoluteFill, Sequence, Series, Loop, Audio, Img, staticFile,
-  Easing, random
-
-Lucide icons (pre-injected  USE HEAVILY for visual elements):
-  Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe,
-  Search, Bell, Check, X, ArrowRight, Video, Monitor, Cpu, Database,
-  Music, Activity, Play, Pause, FastForward, Rewind, Layers, Layout,
-  MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift,
-  ShoppingCart, CreditCard, Wallet, Home, MapPin, Navigation, Compass,
-  Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee,
-  Pizza, Bike, Car, Plane, Anchor, BarChart, PieChart, TrendingUp,
-  Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash,
-  Info, AlertCircle, AlertTriangle, HelpCircle
-
-Standard browser globals: Math, Array, Date, SVGElement, etc.
-
-
-AUDIO  MANDATORY
-
-RULE 1: <Audio> as VERY FIRST child inside outermost <AbsoluteFill>.
-RULE 2: src MUST be a HARDCODED string literal.
-RULE 3: volume={0.5}.
-
-Audio URLs:
-  Upbeat/Corporate   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-  Cinematic/Epic      "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
-  Energetic/Dance     "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
-  Lofi/Chill          "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
-  Dramatic/Suspense   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3"
-  Happy/Playful       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3"
-  Peaceful/Nature     "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3"
-  Sci-Fi/Tech         "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
-
-${brandBlock}
-${sceneBlock}
-
-
- CRITICAL VISUAL DESIGN RULES 
-
-1. VISUAL FIRST: The video is 90% animated graphics, 10% text. NEVER make text the hero.
-2. CONTINUOUS MOTION: Every single frame must have something moving. No static moments.
-   - Background: animated gradient shifts, moving mesh patterns, floating particles ALWAYS.
-   - Mid-layer: geometric shapes rotating, morphing, orbiting, pulsing continuously.
-   - Foreground: icons animating, images zooming/panning, text entering/exiting.
-3. FAST PACING: Use multiple <Sequence> blocks. Each visual element should appear, animate, and exit within 2-4 seconds. Keep it FAST.
-4. SCENE TRANSITIONS: Use scale-down + fade, wipe, or zoom-through transitions between sequences. NEVER just cut.
-
-VISUAL ELEMENTS TO USE (pick 5+ per video):
-   Floating particles with wobble motion (use random() for positions, Math.sin() for wobble)
-   Rotating geometric shapes (squares, circles, triangles with continuous rotation)
-   Gradient orbs that drift across screen (use interpolate on position)
-   Glassmorphism panels (background: rgba, backdropFilter: blur)
-   Animated Lucide icons  orbit them, pulse them, stagger-reveal arrays of them
-   SVG paths and circles (use inline <svg> elements with animated stroke-dashoffset)
-   Grid/dot patterns that shift (backgroundPosition animation)
-   Pulsing rings expanding outward from center
-   Light rays / diagonal streaks sweeping across
-
-TEXT RULES:
-   Maximum 5-7 WORDS per text element. NEVER paragraphs.
-   Text enters with spring animation, stays 1-2 seconds, then EXITS (fade/slide out).
-   Use bold, impactful words only. Think billboard, not paragraph.
-   Make text glow with textShadow: "0 0 30px primaryColor"
-
-${brandKit ? `
- BRAND IDENTITY  NON-NEGOTIABLE 
-  PRIMARY COLOR: ${brandKit.colors?.primary}  USE THIS for accents, highlights, icons, shapes.
-  SECONDARY COLOR: ${brandKit.colors?.secondary || brandKit.colors?.primary}  USE for gradients with primary.
-  BACKGROUND: WHITE (#FFFFFF or #FAFAFA or #F8FAFC). Clean, classy, professional. NEVER dark/black.
-  TEXT COLOR: #1A1A2E or #0F172A (dark navy/charcoal on white background).
-  Font: ${brandKit.fonts?.heading || "Inter"}
-  
-  YOU MUST USE THESE EXACT BRAND COLORS. Do NOT invent random colors.
-  Do NOT use generic blue, purple, teal, or neon colors.
-  The only colors in this video should be: white bg + brand primary + brand secondary + dark text.` :
-`COLOR PALETTE  PROFESSIONAL & CLASSY:
-  Background: WHITE (#FFFFFF, #FAFAFA, or #F8FAFC). Clean, Apple-style.
-  Accent: Pick ONE sophisticated brand color (NOT generic blue/red/green).
-  Text: Dark charcoal (#1A1A2E or #0F172A) on white background.
-  Style: Think Apple, Stripe, Linear  minimal, premium, classy.`}
-
-${brandKit?.images?.length > 0 ? (() => {
-  const pImages = brandKit.images.map((img: any) => ({
-    ...img,
-    url: `/api/image-proxy?url=${encodeURIComponent(img.url)}`,
-  }));
-  return `
- BRAND IMAGES  ABSOLUTELY MANDATORY 
-You MUST display ALL of these images prominently in the video (URLs are PROXIED  guaranteed to load):
-${pImages.map((img: any, i: number) => `  Scene ${i + 1}: <Img src="${img.url}" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:16}} />`).join("\n")}
-
-HOW TO USE IMAGES:
-- Display each image in a rounded-corner frame with subtle shadow
-- Animate with smooth Ken Burns zoom (scale 1.05  1.0 over the scene duration)
-- Add a slight tilt or parallax float animation
-- Place them CENTER STAGE  images are the HERO, text is secondary
-- Use at least 1 image per Sequence block
-`;
-})() : ""}
-
-${brandKit?.logoUrl ? `
- LOGO  MUST APPEAR IN VIDEO 
-LOGO URL (PROXIED): "/api/image-proxy?url=${encodeURIComponent(brandKit.logoUrl)}"
-- Show the logo in the FIRST and LAST scene: <Img src="/api/image-proxy?url=${encodeURIComponent(brandKit.logoUrl)}" style={{width:120,height:120,objectFit:"contain"}} />
-- Animate it: spring scale from 0  1, with a soft shadow
-- The logo must be clearly visible
-` : ""}
-
-
-TECHNICAL RULES
-
-CSS:
-   NEVER mix 'background' and 'backgroundColor' on same element.
-   Use style objects: style={{ transform: \`translateY(\${y}px)\` }}
-
-Animations:
-   const frame = useCurrentFrame(); const { fps, durationInFrames } = useVideoConfig();
-   spring({ frame, fps, config:{ damping:12, stiffness:100 } }) for natural motion
-   interpolate(frame,[0,30],[0,1],{ extrapolateLeft:'clamp', extrapolateRight:'clamp' })
-   Math.sin(frame * 0.05) for continuous wave/wobble motion
-   random(seed) for deterministic randomness (particles, positions)
-
-Images:
-   Use <Img> (not <img>) for all images.
-   Always animate with Ken Burns zoom + pan.
-   NEVER use loremflickr.com.
-
-CONCISENESS & SAFETY:
-   - KEEP CODE UNDER 600 LINES.
-   - NEVER use raw SVG <path> data strings longer than 50 characters. Use Lucide icons instead.
-   - NEVER use base64 data strings.
-   - ENSURE all string constants and braces are closed.
-   - If the code is too long, it will be cut off and fail. Be efficient.
-
-
-USER REQUEST
-
-Prompt   : ${prompt}
-Duration : ${duration} seconds (= ${duration * 30} frames at 30 fps)
-Aspect   : ${aspectVideo}
-
-Create a STUNNING, agency-quality motion graphics video. Think: Apple keynote visuals, Stripe marketing videos, Linear product demos.
-PRIORITIZE VISUAL RICHNESS AND CONTINUOUS MOTION. Minimize text. Make every frame beautiful.
-      `;
+      systemPrompt = [
+        "You are an elite motion designer and cinematic filmmaker at a tier-1 agency (Buck, ManvsMachine, Ordinary Folk).",
+        "You create WORLD-CLASS branded product showcase videos comparable to Apple launches, Stripe visuals, Linear promos, and Vercel launch videos.",
+        "",
+        "════════════════════════════════════════",
+        " HARD OUTPUT RULES",
+        "════════════════════════════════════════",
+        "",
+        " Start EXACTLY with: const MyComposition = () => {",
+        " Do NOT write any import statements.",
+        " Do NOT write export default.",
+        " Do NOT wrap in markdown fences.",
+        " KEEP CODE UNDER 500 LINES. Be efficient. Truncated code = broken video.",
+        " ENSURE all string constants, braces, and JSX tags are properly closed.",
+        " NEVER use base64 data strings or raw SVG <path> data longer than 50 chars.",
+        "",
+        "════════════════════════════════════════",
+        " AVAILABLE APIs",
+        "════════════════════════════════════════",
+        "",
+        "Remotion (pre-injected, use directly):",
+        "  useCurrentFrame, useVideoConfig, spring, interpolate, interpolateColors,",
+        "  AbsoluteFill, Sequence, Series, Loop, Audio, Img, staticFile, Easing, random",
+        "",
+        "Lucide icons (pre-injected — use as SMALL 16-24px ACCENTS only):",
+        "  Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe,",
+        "  Search, Bell, Check, X, ArrowRight, Video, Monitor, Cpu, Database,",
+        "  Music, Activity, Play, Pause, FastForward, Rewind, Layers, Layout,",
+        "  MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift,",
+        "  ShoppingCart, CreditCard, Wallet, Home, MapPin, Navigation, Compass,",
+        "  Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee,",
+        "  Pizza, Bike, Car, Plane, Anchor, BarChart, PieChart, TrendingUp,",
+        "  Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash,",
+        "  Info, AlertCircle, AlertTriangle, HelpCircle",
+        "",
+        "Standard browser globals: Math, Array, Date, etc.",
+        "",
+        "════════════════════════════════════════",
+        " AUDIO — MANDATORY",
+        "════════════════════════════════════════",
+        "",
+        "RULE 1: <Audio> as VERY FIRST child inside outermost <AbsoluteFill>.",
+        "RULE 2: src MUST be a HARDCODED string literal.",
+        "RULE 3: volume={0.3}.",
+        "",
+        "Audio URLs:",
+        '  Cinematic    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"',
+        '  Upbeat       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"',
+        '  Lofi/Chill   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"',
+        '  Tech/Sci-Fi  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"',
+        "",
+        brandBlock,
+        sceneBlock,
+        "",
+        "════════════════════════════════════════",
+        " CINEMATIC VISUAL DESIGN SYSTEM",
+        "════════════════════════════════════════",
+        "",
+        "The output MUST feel cinematic, premium, and expensive.",
+        "Think: Apple keynote, Stripe marketing, Linear promos, Arc browser trailers.",
+        "NOT PowerPoint. NOT slideshows. NOT amateur.",
+        "",
+        "───── 1. BACKGROUND & COLOR SYSTEM ─────",
+        "",
+        `PRIMARY COLOR: ${primaryColor}`,
+        `SECONDARY COLOR: ${secondaryColor}`,
+        `FONT: '${fontFamily}, sans-serif'`,
+        "",
+        "BACKGROUND: Use a RICH DARK cinematic gradient. Example:",
+        `  background: 'linear-gradient(135deg, #0a0a1a 0%, ${primaryColor}12 40%, #0a0a1a 100%)'`,
+        "",
+        "NEVER use plain white backgrounds — they look cheap and wash out screenshots.",
+        "ALWAYS use dark, rich, cinematic backgrounds with subtle color tints from the brand palette.",
+        "",
+        "TEXT: #FFFFFF for headlines, rgba(255,255,255,0.6) for secondary text.",
+        `GLOW: textShadow: '0 0 40px ${primaryColor}60' for premium headline glow.`,
+        "",
+        "───── 2. SCREENSHOT & IMAGE TREATMENT ─────",
+        "",
+        "DO NOT just zoom screenshots. DO NOT place them flat.",
+        "DO NOT stretch images to fill entire screen.",
+        "",
+        "CORRECT screenshot treatment:",
+        "- Frame in a premium device mockup style:",
+        "  * borderRadius: 20",
+        "  * border: '1px solid rgba(255,255,255,0.1)'",
+        "  * boxShadow: '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)'",
+        "  * width: '75%' max, centered with margin auto",
+        "",
+        "- Animate cinematically:",
+        "  * Enter: spring scale from 0.85 to 1.0 + translateY from 40 to 0",
+        "  * Float: translateY with Math.sin(frame * 0.03) * 4 for subtle hover",
+        "  * Optional: perspective(1200px) rotateY with subtle interpolated tilt",
+        "",
+        "- Place text BELOW or BESIDE the image — NEVER on top where it becomes unreadable",
+        "",
+        imageInstructions,
+        logoInstructions,
+        "",
+        "───── 3. ICON RULES — CRITICAL ─────",
+        "",
+        "ICONS ARE SMALL ACCENTS. NEVER the main visual of any scene.",
+        "NEVER render an icon larger than 28px.",
+        "NEVER put icons in large circles/containers as hero elements.",
+        "NEVER use icons as the centerpiece of a scene.",
+        "",
+        "CORRECT icon usage:",
+        "- Tiny floating accents in background (16-20px, opacity 0.15-0.3)",
+        "- Inline with feature labels: <Zap size={16} style={{marginRight:8}} /> Feature",
+        "- Small bullets in feature cards",
+        "- WRONG: <Globe size={120} /> as center — this looks TERRIBLE and amateur",
+        "",
+        "───── 4. TYPOGRAPHY SYSTEM ─────",
+        "",
+        `Headlines: fontSize: 56-72, fontWeight: 900, letterSpacing: '-0.03em', color: '#FFFFFF', fontFamily: '${fontFamily}, sans-serif'`,
+        `  textShadow: '0 0 60px ${primaryColor}50' for premium glow`,
+        "",
+        "Subheads: fontSize: 22-28, fontWeight: 400, color: 'rgba(255,255,255,0.6)'",
+        "",
+        "Feature labels: fontSize: 14-18, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em'",
+        "",
+        "MAX 5-7 WORDS per text element. Think billboard, not paragraph.",
+        "Animate with staggered word reveals: each word delays by 3-4 frames, translateY 20→0 + opacity 0→1",
+        "",
+        "NEVER put dark text on dark backgrounds.",
+        "ALWAYS ensure text is clearly readable against its background.",
+        "",
+        "───── 5. MOTION DESIGN ─────",
+        "",
+        "Every frame must have motion. Required techniques (use 4+ per scene):",
+        "  * Spring animations: spring({ frame, fps, config:{ damping:14, stiffness:80 } })",
+        "  * Continuous background float: Math.sin(frame * 0.02) for organic movement",
+        "  * Staggered reveals: elements enter 4-6 frames apart",
+        "  * Parallax: 2-3 layers at different speeds",
+        "  * Gradient orbs: 200-400px blurred circles drifting slowly in background",
+        "  * Glassmorphism panels: background:'rgba(255,255,255,0.05)', backdropFilter:'blur(20px)', border:'1px solid rgba(255,255,255,0.1)'",
+        "",
+        "TRANSITIONS between Sequences:",
+        "  * Scale-down + fade (scene scales to 0.9 and fades)",
+        "  * Slide in from right/bottom",
+        "  * NEVER hard-cut between scenes",
+        "",
+        "───── 6. SCENE COMPOSITION ─────",
+        "",
+        "Every scene has 3 layers:",
+        "  Layer 1 (BG):      Animated gradient + 15-20 floating particles (2-4px dots, opacity 0.1-0.2)",
+        "  Layer 2 (Content):  Screenshots, text, feature cards — the hero",
+        "  Layer 3 (Accents):  Small floating icons (16px, opacity 0.2), light rays, decorative lines",
+        "",
+        "PARTICLE PATTERN (use in every scene background):",
+        "  {Array.from({length: 15}).map((_, i) => {",
+        "    const x = random('x-'+i) * 100;",
+        "    const y = random('y-'+i) * 100;",
+        "    const s = 2 + random('s-'+i) * 3;",
+        "    return <div key={i} style={{",
+        "      position:'absolute', left: x+'%', top: y+'%',",
+        "      width:s, height:s, borderRadius:'50%',",
+        "      background:'rgba(255,255,255,0.1)',",
+        "      transform: 'translateY('+(Math.sin(frame*0.02+i)*8)+'px)'",
+        "    }} />;",
+        "  })}",
+        "",
+        "───── 7. ANTI-PATTERNS — NEVER DO ─────",
+        "",
+        "✗ Giant Lucide icons as main visuals (amateur)",
+        "✗ Icons in large white/gray circles (ugly)",
+        "✗ Plain white backgrounds (cheap, washes out content)",
+        "✗ Dark text on dark backgrounds (unreadable)",
+        "✗ Screenshots stretched to fill entire screen",
+        "✗ Same layout repeated across scenes (monotonous)",
+        "✗ Mixing 'background' and 'backgroundColor' on same element (CSS conflict)",
+        "✗ More than 7 words per text element",
+        "✗ Static layouts with no motion",
+        "",
+        "════════════════════════════════════════",
+        " TECHNICAL RULES",
+        "════════════════════════════════════════",
+        "",
+        "CSS: NEVER mix 'background' and 'backgroundColor' on same element.",
+        "Images: Use <Img> (not <img>). Always add borderRadius, shadow, border.",
+        "NEVER use loremflickr.com. Use only brand-provided image URLs.",
+        "const frame = useCurrentFrame(); const { fps, durationInFrames } = useVideoConfig();",
+        "",
+        "════════════════════════════════════════",
+        " USER REQUEST",
+        "════════════════════════════════════════",
+        "",
+        `Prompt   : ${prompt}`,
+        `Duration : ${duration} seconds (= ${duration * 30} frames at 30 fps)`,
+        `Aspect   : ${aspectVideo}`,
+        "",
+        "Create a CINEMATIC, PREMIUM motion graphics video.",
+        "Every frame must be visually stunning. The viewer should think: 'This looks expensive.'",
+      ].join("\n");
     }
 
     const result = await model.generateContent(systemPrompt);
