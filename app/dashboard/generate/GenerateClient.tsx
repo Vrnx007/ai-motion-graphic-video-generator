@@ -11,6 +11,7 @@ import {
   Upload, Image, Palette, Copy, Zap, Crown, Rocket, Minimize2,
   Flame, Laptop, Target, Shuffle, Layout,
 } from "lucide-react";
+import * as Babel from "@babel/standalone";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
@@ -239,6 +240,17 @@ export default function GenerateClient() {
         if (!res.ok) throw new Error(data.error);
         
         const safeCode = cleanAiCode(data.videoCode);
+        
+        let isValid = true;
+        if (safeCode.trim().startsWith("{")) {
+          try { JSON.parse(safeCode); } catch(e) { isValid = false; }
+        } else {
+          try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
+          catch(e) { isValid = false; }
+        }
+        
+        if (!isValid) throw new Error("AI code was truncated or invalid.");
+        
         sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
       } catch (err: any) {
         console.error(`Scene ${scene.id} failed:`, err);
@@ -308,7 +320,23 @@ export default function GenerateClient() {
           if (!res.ok) throw new Error(data.error);
           
           const safeCode = cleanAiCode(data.videoCode);
-          sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
+          let isValid = true;
+          if (safeCode.trim().startsWith("{")) {
+            try { JSON.parse(safeCode); } catch(e) { isValid = false; }
+          } else {
+            try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
+            catch(e) { isValid = false; }
+          }
+          if (!isValid) {
+            console.warn(`Quick generate scene ${scene.id} truncated, using fallback`);
+            sceneCodes.push({
+              id: scene.id,
+              code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
+              duration: scene.duration,
+            });
+          } else {
+            sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
+          }
         }
         
         setGeneratingSceneId(null);
@@ -327,6 +355,17 @@ export default function GenerateClient() {
         if (!res.ok) throw new Error(data.error);
         
         const safeCode = cleanAiCode(data.videoCode);
+        
+        let isValid = true;
+        if (safeCode.trim().startsWith("{")) {
+          try { JSON.parse(safeCode); } catch(e) { isValid = false; }
+        } else {
+          try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
+          catch(e) { isValid = false; }
+        }
+        
+        if (!isValid) throw new Error("The AI generated incomplete code due to length limits. Please try again or use a longer duration to enable scene-based generation.");
+        
         setVideoCode(safeCode);
         if (data.duration) setDuration(data.duration);
         setStep("preview");
