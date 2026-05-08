@@ -250,28 +250,71 @@ export default function GenerateClient() {
     autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0));
   };
 
-  // ── Quick Generate (no scenes, direct) ──
+  // ── Quick Generate (handles long videos by auto-scripting) ──
   const handleQuickGenerate = async () => {
     setLoading(true);
     setVideoCode("");
     try {
-      const res = await fetch("/api/generate-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: getEnhancedPrompt(), duration, aspectVideo: aspectRatio, brandKit }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setVideoCode(data.videoCode);
-      if (data.duration) setDuration(data.duration);
-      setStep("preview");
-      
-      // Auto-save the project to the library
-      autoSaveProject(data.videoCode, data.duration || duration);
+      // If duration is long, we MUST use scene-based generation to avoid AI truncation
+      if (duration > 20) {
+        console.log("Long duration detected. Using auto-scripting workflow...");
+        
+        // 1. Generate Script
+        const scriptRes = await fetch("/api/generate-script", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration, brandKit }),
+        });
+        const scriptData = await scriptRes.json();
+        if (!scriptRes.ok) throw new Error(scriptData.error);
+        const autoScenes = scriptData.scenes || [];
+        setScenes(autoScenes);
+
+        // 2. Generate Each Scene
+        const sceneCodes: SceneCode[] = [];
+        for (const scene of autoScenes) {
+          setGeneratingSceneId(scene.id);
+          const dirStyle = DIRECTOR_STYLES.find(s => s.id === directorStyle);
+          const res = await fetch("/api/generate-video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
+              duration: scene.duration,
+              aspectVideo: aspectRatio,
+              brandKit,
+              scene,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          sceneCodes.push({ id: scene.id, code: data.videoCode, duration: scene.duration });
+        }
+        
+        setGeneratingSceneId(null);
+        const stitched = stitchScenes(sceneCodes);
+        setVideoCode(stitched);
+        setStep("preview");
+        autoSaveProject(stitched, duration);
+      } else {
+        // Short video: single generation is fine
+        const res = await fetch("/api/generate-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: getEnhancedPrompt(), duration, aspectVideo: aspectRatio, brandKit }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setVideoCode(data.videoCode);
+        if (data.duration) setDuration(data.duration);
+        setStep("preview");
+        autoSaveProject(data.videoCode, data.duration || duration);
+      }
     } catch (err: any) {
       alert(`Generation failed: ${err.message}`);
     } finally {
       setLoading(false);
+      setGeneratingSceneId(null);
     }
   };
 
