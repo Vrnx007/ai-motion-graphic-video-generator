@@ -245,6 +245,9 @@ export default function GenerateClient() {
     setVideoCode(stitched);
     setLoading(false);
     setStep("preview");
+    
+    // Auto-save the project to the library
+    autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0));
   };
 
   // ── Quick Generate (no scenes, direct) ──
@@ -262,10 +265,30 @@ export default function GenerateClient() {
       setVideoCode(data.videoCode);
       if (data.duration) setDuration(data.duration);
       setStep("preview");
+      
+      // Auto-save the project to the library
+      autoSaveProject(data.videoCode, data.duration || duration);
     } catch (err: any) {
       alert(`Generation failed: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Auto Save ──
+  const autoSaveProject = async (codeToSave: string, currentDuration: number) => {
+    try {
+      const res = await fetch("/api/save-project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoCode: codeToSave, prompt: getEnhancedPrompt(), duration: currentDuration, aspectRatio }),
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        setShareUrl(`${window.location.origin}/share/${data.id}`);
+      }
+    } catch (err) {
+      console.error("Auto-save failed:", err);
     }
   };
 
