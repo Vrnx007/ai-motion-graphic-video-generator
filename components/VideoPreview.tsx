@@ -82,7 +82,10 @@ const VideoPreviewBase = ({
         filename: "composition.tsx",
       }).code;
 
-      // 🔹 3. Extract ONLY allowed Remotion functions (safe)
+      // Strip "use strict"; to avoid strict-mode issues inside new Function
+      const cleanTranspiled = (transpiled || "").replace(/^["']use strict["'];?\s*/g, "");
+
+      // 🔹 3. Extract Remotion functions
       const {
         AbsoluteFill,
         useCurrentFrame,
@@ -104,101 +107,21 @@ const VideoPreviewBase = ({
         continueRender,
       } = Remotion;
 
-      // Make Math & Array available for particle / SVG generative code
       const _Math = Math;
       const _Array = Array;
-
-      // 🔹 3b. Build the set of identifiers we inject into scope
-      const injectedNames = new Set([
-        "React", "AbsoluteFill", "useCurrentFrame", "useVideoConfig",
-        "spring", "interpolate", "interpolateColors", "Easing", "Img",
-        "Sequence", "Audio", "Video", "OffthreadVideo", "staticFile",
-        "Series", "Loop", "random", "delayRender", "continueRender",
-        "Math", "Array", "MyComposition",
-        // Lucide icons we explicitly import
-        "Monitor", "Cpu", "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity",
-        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
-        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle",
-        ...Array.from({length: 50}, (_, i) => `Scene${i+1}`),
-      ]);
-
-      // 🔹 3c. Scan transpiled code for ALL PascalCase identifiers the AI used
-      //    and generate stub declarations for anything we don't inject.
-      //    This makes ReferenceError IMPOSSIBLE regardless of what the AI writes.
-      const allIdentifiers = Array.from(
-        new Set(
-          Array.from((transpiled || "").matchAll(/\b([A-Z][a-zA-Z0-9_]*)\b/g)).map(m => m[1])
-        )
-      );
-      const stubs = allIdentifiers
-        .filter(id => !injectedNames.has(id))
-        .map(id => `var ${id} = function(props) { return React.createElement("span", null); };`)
-        .join("\n");
-
-      // 🔹 4. Create component dynamically
-      const createComponent = new Function(
-        "React",
-        "AbsoluteFill",
-        "useCurrentFrame",
-        "useVideoConfig",
-        "spring",
-        "interpolate",
-        "interpolateColors",
-        "Easing",
-        "Img",
-        "Sequence",
-        "Audio",
-        "Video",
-        "OffthreadVideo",
-        "staticFile",
-        "Series",
-        "Loop",
-        "random",
-        "delayRender",
-        "continueRender",
-        // Math / Array for particle / generative effects
-        "Math",
-        "Array",
-        // Icons
-        "Cloud", "Shield", "Zap", "Settings", "Mail", "Lock", "User", "Star", "Heart", "Globe", "Search", "Bell", "Check", "X", "ArrowRight", "LucideVideo", "Database", "Music", "Activity", "Monitor", "Cpu",
-        "Play", "Pause", "FastForward", "Rewind", "Layers", "Layout", "MousePointer", "Smartphone", "Tablet", "Laptop", "Tv", "Camera", "Image", "Gift", "ShoppingCart", "CreditCard", "Wallet", "Home", "MapPin", "Navigation", "Compass", "Sunrise", "Sunset", "Moon", "Sun", "Wind", "Droplets", "Flame", "Leaf", "Coffee", "Pizza", "Bike", "Car", "Plane", "Anchor",
-        "BarChart", "PieChart", "TrendingUp", "Briefcase", "Rocket", "Sparkles", "Wand2", "Lightbulb", "PenTool", "Hash", "Info", "AlertCircle", "AlertTriangle", "HelpCircle",
-        `
-        ${stubs}
-
-        ${transpiled}
-        
-        if (typeof MyComposition === "undefined") {
-          throw new Error("MyComposition not found in AI code. Make sure it starts with: const MyComposition = () => {");
-        }
-
-        return MyComposition;
-        `
-      );
-
-      // Create safety wrappers to prevent common AI errors
-      const safeSpring = (options: any) => spring({ fps: 30, ...options });
-      const safeStaticFile = (file: string) => (typeof file === "string" && file.startsWith("http")) ? file : staticFile(file);
-      const safeRandom = (seed: any) => random(seed); // Force only one argument
 
       // 🔹 Bulletproof safeInterpolate — handles ALL common AI-generated mistakes silently
       const safeInterpolate = (input: number, inputRange: number[], outputRange: any[], options?: any): any => {
         try {
-          // Guard: inputs must be arrays with same length >= 2
           if (!Array.isArray(inputRange) || !Array.isArray(outputRange)) return outputRange?.[0] ?? 0;
           if (inputRange.length < 2 || outputRange.length < 2) return outputRange[0];
           if (inputRange.length !== outputRange.length) return outputRange[0];
-          // Guard: input must be a finite number
           if (typeof input !== "number" || !isFinite(input)) return outputRange[0];
-          // Guard: inputRange must be strictly ascending — sort both arrays together if not
           const pairs = inputRange.map((v, i) => [v, outputRange[i]] as [number, any]);
           pairs.sort((a, b) => a[0] - b[0]);
           const sortedInput = pairs.map(p => p[0]);
           const sortedOutput = pairs.map(p => p[1]);
-          // Guard: no duplicate values in inputRange
           if (sortedInput.some((v, i) => i > 0 && v === sortedInput[i - 1])) return sortedOutput[0];
-
-          // Fix options
           let safeOptions: any = undefined;
           if (typeof options === "function") {
             safeOptions = { easing: options };
@@ -206,7 +129,6 @@ const VideoPreviewBase = ({
             const { easing, ...rest } = options;
             safeOptions = typeof easing === "function" ? { ...rest, easing } : rest;
           }
-
           return interpolate(input, sortedInput, sortedOutput, safeOptions);
         } catch {
           return outputRange?.[0] ?? 0;
@@ -223,9 +145,6 @@ const VideoPreviewBase = ({
 
       /**
        * SafeImg: Pre-fetches every image as a same-origin blob URL.
-       * This eliminates Remotion's "EncodingError: source image cannot be decoded"
-       * which happens because OffscreenCanvas cannot read cross-origin images.
-       * By converting to a blob:// URL first, the image is treated as same-origin.
        */
       const SafeImg = (props: any) => {
         const FALLBACK = "https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1280&q=80";
@@ -294,8 +213,6 @@ const VideoPreviewBase = ({
 
       /**
        * SafeAudio: Guards against undefined / empty src from AI-generated code.
-       * Remotion throws a hard TypeError if src is undefined — this silently
-       * falls back to a default track so the video still renders.
        */
       const DEFAULT_AUDIO = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
       const SafeAudio = (props: any) => {
@@ -304,34 +221,60 @@ const VideoPreviewBase = ({
           : DEFAULT_AUDIO;
         return <Audio {...props} src={src} />;
       };
-      const result = createComponent(
+
+      // 🔹 4. Build a single scope object with ALL injected dependencies
+      //    This avoids new Function parameter limits and duplicate-name issues.
+      const scope: Record<string, any> = {
         React,
         AbsoluteFill,
         useCurrentFrame,
         useVideoConfig,
-        (options: any) => spring({ fps: 30, ...options }),
-        safeInterpolate,
-        safeInterpolateColors,
+        spring: (options: any) => spring({ fps: 30, ...options }),
+        interpolate: safeInterpolate,
+        interpolateColors: safeInterpolateColors,
         Easing,
-        SafeImg,
+        Img: SafeImg,
         Sequence,
-        SafeAudio,
-        SafeVideo,
-        SafeOffthreadVideo,
-        (file: string) => (typeof file === "string" && file.startsWith("http")) ? file : staticFile(file),
+        Audio: SafeAudio,
+        Video: SafeVideo,
+        OffthreadVideo: SafeOffthreadVideo,
+        staticFile: (file: string) => (typeof file === "string" && file.startsWith("http")) ? file : staticFile(file),
         Series,
         Loop,
         random,
         delayRender,
         continueRender,
-        // Math / Array for generative / particle effects
-        _Math,
-        _Array,
-        // Icons
-        Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight, Video, Database, Music, Activity, Monitor, Cpu,
-        Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet, Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
-        BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
+        Math: _Math,
+        Array: _Array,
+        // All explicitly imported Lucide icons
+        Monitor, Cpu, Cloud, Shield, Zap, Settings, Mail, Lock, User, Star, Heart, Globe, Search, Bell, Check, X, ArrowRight,
+        LucideVideo: Video, Database, Music, Activity,
+        Play, Pause, FastForward, Rewind, Layers, Layout, MousePointer, Smartphone, Tablet, Laptop, Tv, Camera, Image, Gift, ShoppingCart, CreditCard, Wallet,
+        Home, MapPin, Navigation, Compass, Sunrise, Sunset, Moon, Sun, Wind, Droplets, Flame, Leaf, Coffee, Pizza, Bike, Car, Plane, Anchor,
+        BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle,
+      };
+
+      // 🔹 4b. Scan transpiled code for ALL PascalCase identifiers.
+      //    Any identifier not in our scope gets a harmless stub component.
+      //    This makes ReferenceError IMPOSSIBLE no matter what the AI writes.
+      const allIdentifiers = Array.from(
+        new Set(
+          Array.from(cleanTranspiled.matchAll(/\b([A-Z][a-zA-Z0-9_]*)\b/g)).map(m => m[1])
+        )
       );
+      for (const id of allIdentifiers) {
+        if (!(id in scope)) {
+          scope[id] = (props: any) => React.createElement("span", null);
+        }
+      }
+
+      // 🔹 4c. Build destructuring preamble + the transpiled code
+      const scopeKeys = Object.keys(scope);
+      const destructure = `var {${scopeKeys.join(",")}} = __scope__;`;
+      const functionBody = `${destructure}\n${cleanTranspiled}\nif (typeof MyComposition === "undefined") { throw new Error("MyComposition not found"); }\nreturn MyComposition;`;
+
+      const createComponent = new Function("__scope__", functionBody);
+      const result = createComponent(scope);
 
       // 🔹 5. Wrap into React component
       setComponent(() => (props: any) =>
