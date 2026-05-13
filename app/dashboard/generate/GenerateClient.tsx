@@ -60,6 +60,43 @@ const PLATFORM_PRESETS = [
   { id: "website", label: "Website", aspect: "16:9", duration: 60 },
 ];
 
+/** Force scene durations to sum to targetSeconds (slider is source of truth). */
+function rescaleScenesToTargetSeconds(scenes: Scene[], targetSeconds: number): Scene[] {
+  if (!scenes.length || !Number.isFinite(targetSeconds) || targetSeconds < 5) return scenes;
+  const t = Math.min(300, Math.max(5, Math.round(targetSeconds)));
+  const sum = scenes.reduce((s, sc) => s + (Number(sc.duration) || 0), 0);
+  if (!Number.isFinite(sum) || sum <= 0) {
+    const base = Math.max(3, Math.floor(t / scenes.length));
+    let run = 0;
+    return scenes.map((sc, i) => {
+      if (i === scenes.length - 1) {
+        return { ...sc, duration: Math.max(3, t - run) };
+      }
+      run += base;
+      return { ...sc, duration: base };
+    });
+  }
+  if (Math.abs(sum - t) <= 2) {
+    return scenes.map((sc) => ({ ...sc, duration: Math.max(3, Math.round(Number(sc.duration) || 0)) }));
+  }
+  const ratio = t / sum;
+  let running = 0;
+  const out = scenes.map((sc, i) => {
+    if (i === scenes.length - 1) {
+      return { ...sc, duration: Math.max(3, t - running) };
+    }
+    const d = Math.max(3, Math.round((Number(sc.duration) || 0) * ratio));
+    running += d;
+    return { ...sc, duration: d };
+  });
+  const drift = t - out.reduce((s, sc) => s + sc.duration, 0);
+  if (drift !== 0 && out.length > 0) {
+    const last = out[out.length - 1];
+    out[out.length - 1] = { ...last, duration: Math.max(3, last.duration + drift) };
+  }
+  return out;
+}
+
 type Step = "input" | "brand-review" | "script" | "generating" | "preview";
 
 export default function GenerateClient() {
@@ -243,15 +280,11 @@ export default function GenerateClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const nextScenes = data.scenes || [];
+      const nextScenes = rescaleScenesToTargetSeconds(data.scenes || [], requestedDuration);
       setScenes(nextScenes);
       setMusicMood(typeof data.musicMood === "string" ? data.musicMood : null);
       setSceneCodes([]);
-      const td = Number(data.totalDuration);
-      const sceneSum = nextScenes.reduce((s: number, sc: Scene) => s + (Number(sc.duration) || 0), 0);
-      if (Number.isFinite(td) && td >= 5 && td <= 300) setDuration(td);
-      else if (Number.isFinite(sceneSum) && sceneSum >= 5 && sceneSum <= 300) setDuration(sceneSum);
-      else setDuration(requestedDuration);
+      // Never overwrite the user's target duration from API totals — models sometimes return wrong sums.
       setStep("script");
     } catch (err: any) {
       alert(`Script generation failed: ${err.message}`);
@@ -353,7 +386,7 @@ export default function GenerateClient() {
         });
         const scriptData = await scriptRes.json();
         if (!scriptRes.ok) throw new Error(scriptData.error);
-        const autoScenes = scriptData.scenes || [];
+        const autoScenes = rescaleScenesToTargetSeconds(scriptData.scenes || [], duration);
         setScenes(autoScenes);
         setMusicMood(typeof scriptData.musicMood === "string" ? scriptData.musicMood : null);
 
