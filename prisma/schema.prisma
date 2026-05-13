@@ -80,6 +80,7 @@ model Project {
   aspectRatio String    @default("16:9")
   videoType   String    @default("general")
   scenes      Json?
+  musicMood   String?
   downloadUrl String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

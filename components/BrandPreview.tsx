@@ -5,6 +5,8 @@ import { Globe, Palette, Type, Image, Sparkles, ExternalLink } from "lucide-reac
 import { motion } from "framer-motion";
 
 interface BrandPreviewProps {
+  /** When false, hide the horizontal "images found" strip (use BrandImagePicker for curation instead). */
+  showImageGallery?: boolean;
   brand: {
     name?: string;
     sourceUrl?: string;
@@ -23,7 +25,7 @@ interface BrandPreviewProps {
   compact?: boolean;
 }
 
-export default function BrandPreview({ brand, compact = false }: BrandPreviewProps) {
+export default function BrandPreview({ brand, compact = false, showImageGallery = true }: BrandPreviewProps) {
   const palette = brand.brandPalette || [];
   const images = brand.images || [];
   const features = brand.features || [];
@@ -151,7 +153,7 @@ export default function BrandPreview({ brand, compact = false }: BrandPreviewPro
       )}
 
       {/* Images */}
-      {images.length > 0 && (
+      {showImageGallery && images.length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <Image className="w-3 h-3 text-slate-500" />

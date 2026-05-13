@@ -32,6 +32,54 @@ const FETCH_TIMEOUT = 12_000;
 // Blacklist patterns for ad/tracker images
 const IMG_BLACKLIST = /doubleclick|googlesyndication|googleadservices|facebook\.com\/tr|pixel|analytics|tracking|beacon|1x1|spacer|blank\.gif/i;
 
+/** Paths that are almost never usable raster heroes */
+const NON_IMAGE_PATH = /\.(js|mjs|cjs|ts|tsx|jsx|css|json|map|html|htm|woff2?|ttf|eot|otf|mp4|webm|mov|pdf|zip)(\?|$)/i;
+
+/** Known image-ish extensions (incl. svg, modern raster) */
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|avif|svg|jxl|bmp|ico)(\?|$)/i;
+
+function isLikelyImageAssetUrl(href: string): boolean {
+  if (!href || href.startsWith("data:")) return false;
+  if (IMG_BLACKLIST.test(href)) return false;
+  try {
+    const { pathname } = new URL(href, "https://example.com");
+    if (NON_IMAGE_PATH.test(pathname)) return false;
+    if (IMAGE_EXT_RE.test(pathname)) return true;
+    // WordPress / CDNs often omit extensions — allow query hints
+    if (/[?&](format=webp|format=avif|type=image)/i.test(href)) return true;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** Pick the largest candidate from an HTML srcset string */
+function pickLargestFromSrcset(srcset: string | undefined, baseUrl: string): string | null {
+  if (!srcset?.trim()) return null;
+  let bestUrl: string | null = null;
+  let bestScore = -1;
+  for (const part of srcset.split(",")) {
+    const t = part.trim();
+    if (!t) continue;
+    const bits = t.split(/\s+/);
+    const raw = bits[0];
+    if (!raw) continue;
+    let score = 0;
+    for (let i = 1; i < bits.length; i++) {
+      const w = bits[i].match(/^(\d+)w$/i);
+      if (w) score = Math.max(score, parseInt(w[1], 10));
+      const x = bits[i].match(/^(\d+(?:\.\d+)?)x$/i);
+      if (x) score = Math.max(score, Math.round(parseFloat(x[1]) * 1000));
+    }
+    const resolved = resolveUrl(raw, baseUrl);
+    if (score >= bestScore) {
+      bestScore = score;
+      bestUrl = resolved;
+    }
+  }
+  return bestUrl;
+}
+
 export interface BrandData {
   logoUrl: string | null;
   colors: {
@@ -373,22 +421,36 @@ async function extractColorPalette(imageUrl: string): Promise<string[]> {
 
 // ─── Image Extraction ────────────────────────────────────
 
+function pushImage(
+  images: Array<{ url: string; alt: string; context: string }>,
+  seen: Set<string>,
+  url: string,
+  alt: string,
+  context: string,
+  max: number
+): void {
+  if (images.length >= max) return;
+  if (!url || url.startsWith("data:") || IMG_BLACKLIST.test(url)) return;
+  if (!isLikelyImageAssetUrl(url)) return;
+  if (seen.has(url)) return;
+  seen.add(url);
+  images.push({ url, alt: alt || "", context });
+}
+
 function extractImages(
   $: cheerio.CheerioAPI,
   baseUrl: string
 ): Array<{ url: string; alt: string; context: string }> {
   const images: Array<{ url: string; alt: string; context: string }> = [];
   const seen = new Set<string>();
+  const max = 22;
 
   // OG images (highest priority)
-  $('meta[property="og:image"]').each((_, el) => {
+  $('meta[property="og:image"], meta[name="og:image"]').each((_, el) => {
     const content = $(el).attr("content");
     if (content) {
       const url = resolveUrl(content, baseUrl);
-      if (!seen.has(url)) {
-        seen.add(url);
-        images.push({ url, alt: "Open Graph image", context: "og" });
-      }
+      pushImage(images, seen, url, "Open Graph image", "og", max);
     }
   });
 
@@ -397,43 +459,86 @@ function extractImages(
     const content = $(el).attr("content");
     if (content) {
       const url = resolveUrl(content, baseUrl);
-      if (!seen.has(url)) {
-        seen.add(url);
-        images.push({ url, alt: "Twitter card image", context: "social" });
-      }
+      pushImage(images, seen, url, "Twitter card image", "social", max);
+    }
+  });
+
+  // Legacy image_src link
+  $('link[rel="image_src"]').each((_, el) => {
+    const href = $(el).attr("href");
+    if (href) {
+      const url = resolveUrl(href, baseUrl);
+      pushImage(images, seen, url, "Image link", "link", max);
+    }
+  });
+
+  // Preloaded hero / LCP candidates
+  $('link[rel="preload"][as="image"]').each((_, el) => {
+    const href = $(el).attr("href");
+    if (href) {
+      const url = resolveUrl(href, baseUrl);
+      pushImage(images, seen, url, "Preload image", "preload", max);
+    }
+  });
+
+  // Video posters (often high-res marketing stills)
+  $("video[poster]").each((_, el) => {
+    const poster = $(el).attr("poster");
+    if (poster) {
+      const url = resolveUrl(poster, baseUrl);
+      pushImage(images, seen, url, "Video poster", "poster", max);
+    }
+  });
+
+  // <picture> — prefer largest source from srcset
+  $("picture").each((_, pic) => {
+    const $pic = $(pic);
+    let best: string | null = null;
+    $pic.find("source").each((__, srcEl) => {
+      const srcset = $(srcEl).attr("srcset");
+      const picked = pickLargestFromSrcset(srcset, baseUrl);
+      if (picked) best = picked;
+    });
+    const imgSrc = $pic.find("img").first().attr("src") || $pic.find("img").first().attr("data-src");
+    const fromSrcset = best;
+    const fromImg = imgSrc ? resolveUrl(imgSrc, baseUrl) : null;
+    const url = fromSrcset || fromImg;
+    if (url) {
+      const alt = $pic.find("img").first().attr("alt") || "";
+      pushImage(images, seen, url, alt, "picture", max);
     }
   });
 
   // Hero section images (large images in main/section/hero areas)
-  $("main img, section img, [class*='hero'] img, [class*='banner'] img, [id*='hero'] img").each(
-    (_, el) => {
-      const src = $(el).attr("src") || $(el).attr("data-src");
-      if (!src || src.startsWith("data:") || IMG_BLACKLIST.test(src)) return;
-      const url = resolveUrl(src, baseUrl);
-      if (seen.has(url)) return;
-      const alt = $(el).attr("alt") || "";
-      seen.add(url);
-      images.push({ url, alt, context: "hero" });
-    }
-  );
+  $("main img, section img, [class*='hero'] img, [class*='banner'] img, [id*='hero'] img").each((_, el) => {
+    const $el = $(el);
+    const srcset = $el.attr("srcset");
+    const picked = pickLargestFromSrcset(srcset, baseUrl);
+    const src = picked || $el.attr("src") || $el.attr("data-src");
+    if (!src || src.startsWith("data:")) return;
+    const url = resolveUrl(src, baseUrl);
+    const alt = $el.attr("alt") || "";
+    pushImage(images, seen, url, alt, "hero", max);
+  });
 
-  // Product / feature images (limit to first 10 meaningful ones)
+  // Product / feature images
   $("img").each((_, el) => {
-    if (images.length >= 12) return;
-    const src = $(el).attr("src") || $(el).attr("data-src");
+    if (images.length >= max) return;
+    const $el = $(el);
+    const srcset = $el.attr("srcset");
+    const picked = pickLargestFromSrcset(srcset, baseUrl);
+    const src = picked || $el.attr("src") || $el.attr("data-src");
     if (!src || src.startsWith("data:") || IMG_BLACKLIST.test(src)) return;
     const url = resolveUrl(src, baseUrl);
     if (seen.has(url)) return;
-    // Skip tiny images (icons, spacers)
-    const width = parseInt($(el).attr("width") || "0");
-    const height = parseInt($(el).attr("height") || "0");
-    if ((width > 0 && width < 50) || (height > 0 && height < 50)) return;
-    const alt = $(el).attr("alt") || "";
-    seen.add(url);
-    images.push({ url, alt, context: "product" });
+    const width = parseInt($el.attr("width") || "0", 10);
+    const height = parseInt($el.attr("height") || "0", 10);
+    if ((width > 0 && width < 40) || (height > 0 && height < 40)) return;
+    const alt = $el.attr("alt") || "";
+    pushImage(images, seen, url, alt, "page", max);
   });
 
-  return images.slice(0, 12);
+  return images.slice(0, 18);
 }
 
 // ─── Content Extraction ──────────────────────────────────

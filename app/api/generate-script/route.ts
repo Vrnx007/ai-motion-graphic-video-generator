@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
+import { validateScenePlan } from "@/lib/script-plan-validator";
 
 export const maxDuration = 120;
 
@@ -92,14 +93,23 @@ BRAND CONTEXT:
   CTA Text: ${brandKit.cta || "Get Started"}
   Features: ${JSON.stringify(brandKit.features || [])}
   Logo URL: ${brandKit.logoUrl || "N/A"}
-  Available Images from website (DISTRIBUTE across scenes):
-${images.map((img: any, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt || img.context})`).join("\n")}
+  Available Images from website (USER-CURATED — use ONLY these URLs, do not invent or substitute):
+${images.length ? images.map((img: { url: string; alt?: string; context?: string }, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt || img.context || "asset"})`).join("\n") : "    (none — prefer typography / abstract scenes)"}
+  The user may have removed irrelevant assets; respect this list exactly.
 `;
     }
 
     const systemPrompt = [
       "You are an elite creative director and SaaS launch filmmaker.",
       "You generate CINEMATIC scene plans for premium product showcase videos.",
+      "",
+      "Voice and taste: confident, minimal copy, luxury-tech tone (Stripe, Linear, Vercel, Apple keynote energy).",
+      "Avoid cheesy superlatives, exclamation overload, or generic marketing clichés.",
+      "",
+      "MOTION RICHNESS (mandatory in every scene's visual field):",
+      "  - Stack 3+ coordinated motions per scene (e.g. slow parallax drift + staggered text + gradient pulse + subtle grain).",
+      "  - Prefer continuous micro-motion (floating, breathing scale, light leaks, soft blur orbs) over static slides.",
+      "  - Each scene should feel like a high-end product film beat, not a PowerPoint slide.",
       "",
       "Your scene plans must produce videos comparable to Apple launches, Stripe visuals, Linear promos, and Vercel launch videos.",
       "NOT PowerPoint. NOT slideshows. NOT generic motion graphics.",
@@ -249,28 +259,85 @@ ${images.map((img: any, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt
       .trim();
 
     // Parse and validate
-    const scenePlan: ScenePlan = JSON.parse(text);
+    let scenePlan: ScenePlan = JSON.parse(text);
 
     if (!scenePlan.scenes || !Array.isArray(scenePlan.scenes)) {
       throw new Error("Invalid scene plan: missing scenes array");
     }
 
-    // POST-PROCESS: Force total duration to match target
-    const actualTotal = scenePlan.scenes.reduce((s, sc) => s + sc.duration, 0);
-    if (actualTotal !== targetDuration) {
-      const ratio = targetDuration / actualTotal;
-      let running = 0;
-      scenePlan.scenes.forEach((sc, i) => {
-        if (i === scenePlan.scenes.length - 1) {
-          sc.duration = targetDuration - running;
-        } else {
-          sc.duration = Math.max(3, Math.round(sc.duration * ratio));
-          running += sc.duration;
+    const normalizeDurations = (plan: ScenePlan) => {
+      for (const sc of plan.scenes) {
+        sc.duration = Math.max(0, Math.round(Number(sc.duration) || 0));
+      }
+      let actualTotal = plan.scenes.reduce((s, sc) => s + sc.duration, 0);
+      if (!Number.isFinite(actualTotal) || actualTotal <= 0) {
+        const n = plan.scenes.length;
+        const base = Math.max(3, Math.floor(targetDuration / Math.max(n, 1)));
+        let run = 0;
+        plan.scenes.forEach((sc, i) => {
+          if (i === n - 1) sc.duration = Math.max(3, targetDuration - run);
+          else {
+            sc.duration = base;
+            run += base;
+          }
+        });
+        actualTotal = plan.scenes.reduce((s, sc) => s + sc.duration, 0);
+      }
+      if (actualTotal !== targetDuration) {
+        const ratio = targetDuration / actualTotal;
+        let running = 0;
+        plan.scenes.forEach((sc, i) => {
+          if (i === plan.scenes.length - 1) {
+            sc.duration = Math.max(3, targetDuration - running);
+          } else {
+            sc.duration = Math.max(3, Math.round(sc.duration * ratio));
+            running += sc.duration;
+          }
+        });
+        const drift = targetDuration - plan.scenes.reduce((s, sc) => s + sc.duration, 0);
+        if (drift !== 0 && plan.scenes.length > 0) {
+          const last = plan.scenes[plan.scenes.length - 1];
+          last.duration = Math.max(3, last.duration + drift);
         }
-      });
-    }
+      }
+      plan.totalDuration = targetDuration;
+      if (!plan.musicMood || typeof plan.musicMood !== "string") {
+        plan.musicMood = "upbeat tech";
+      }
+    };
 
-    scenePlan.totalDuration = targetDuration;
+    normalizeDurations(scenePlan);
+
+    let issues = validateScenePlan(scenePlan, sceneCount, targetDuration);
+    if (issues.length > 0) {
+      console.warn("[generate-script] Plan validation issues, running repair pass:", issues);
+      const repairPrompt = [
+        "You fix JSON scene plans for SaaS promo videos.",
+        "Return ONLY valid JSON (no markdown). Same schema: { scenes: [...], totalDuration, musicMood }.",
+        `TARGET_DURATION_SECONDS: ${targetDuration}`,
+        `REQUIRED_SCENE_COUNT: ${sceneCount}`,
+        "Fix ALL of the following issues:",
+        ...issues.map((i) => `- [${i.code}] ${i.message}`),
+        "",
+        "Current plan JSON:",
+        JSON.stringify(scenePlan),
+      ].join("\n");
+
+      let repairRaw = await generateWithRetry(repairPrompt);
+      repairRaw = repairRaw
+        .replace(/^```(?:json)?\s*\n?/gim, "")
+        .replace(/\n?```\s*$/gim, "")
+        .trim();
+      scenePlan = JSON.parse(repairRaw) as ScenePlan;
+      if (!scenePlan.scenes || !Array.isArray(scenePlan.scenes)) {
+        throw new Error("Repair pass returned invalid scene plan");
+      }
+      normalizeDurations(scenePlan);
+      issues = validateScenePlan(scenePlan, sceneCount, targetDuration);
+      if (issues.length > 0) {
+        console.warn("[generate-script] Repair pass still has issues (returning best effort):", issues);
+      }
+    }
 
     return NextResponse.json(scenePlan);
   } catch (error: any) {

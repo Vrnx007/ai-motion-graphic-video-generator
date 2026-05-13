@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { Player } from "@remotion/player";
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { Player, type PlayerRef } from "@remotion/player";
 import * as Babel from "@babel/standalone";
 import * as Remotion from "remotion";
 import { TemplateRegistry } from "./templates/TemplateRegistry";
@@ -12,18 +12,60 @@ import {
   BarChart, PieChart, TrendingUp, Briefcase, Rocket, Sparkles, Wand2, Lightbulb, PenTool, Hash, Info, AlertCircle, AlertTriangle, HelpCircle
 } from "lucide-react";
 
-const VideoPreviewBase = ({ 
-  code, 
-  duration = 10, 
-  aspectRatio = "16:9" 
-}: { 
-  code: string, 
-  duration?: number,
-  aspectRatio?: string
-}) => {
+export type VideoPreviewVariant = "editor" | "clean";
+
+export type VideoPreviewHandle = {
+  play: () => void;
+  pause: () => void;
+  seekToStart: () => void;
+};
+
+const DEFAULT_BG_MUSIC =
+  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+
+type VideoPreviewProps = {
+  code: string;
+  duration?: number;
+  aspectRatio?: string;
+  /** editor: Remotion default controls (scrubber). clean: minimal overlay — better for screen capture / perceived “final” frame */
+  variant?: VideoPreviewVariant;
+  /** Optional background track for template_sequence wrapper (Phase 3 wiring) */
+  musicSrc?: string | null;
+};
+
+const VideoPreviewBase = forwardRef<VideoPreviewHandle | null, VideoPreviewProps>(function VideoPreviewBase(
+  {
+    code,
+    duration = 10,
+    aspectRatio = "16:9",
+    variant = "editor",
+    musicSrc = null,
+  },
+  ref
+) {
+  const playerRef = useRef<PlayerRef>(null);
   const [isTranspiling, setIsTranspiling] = useState(false);
   const [Component, setComponent] = useState<React.ComponentType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cleanPlaying, setCleanPlaying] = useState(false);
+
+  const bgTrack = musicSrc?.trim() || DEFAULT_BG_MUSIC;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      play: () => {
+        playerRef.current?.play();
+      },
+      pause: () => {
+        playerRef.current?.pause();
+      },
+      seekToStart: () => {
+        playerRef.current?.seekTo(0);
+      },
+    }),
+    []
+  );
 
   useEffect(() => {
     if (!code) {
@@ -57,10 +99,13 @@ const VideoPreviewBase = ({
         }
 
         if (parsed.type === "template_sequence" && parsed.sequences) {
+          const track =
+            (typeof parsed.musicSrc === "string" && parsed.musicSrc.trim()) ||
+            bgTrack;
           const { AbsoluteFill, Audio, Sequence } = Remotion;
           setComponent(() => (props: any) => (
             <AbsoluteFill style={{ backgroundColor: "#000" }}>
-              <Audio src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" volume={0.5} />
+              <Audio src={track} volume={0.35} />
               {parsed.sequences.map((seq: any, i: number) => (
                 <Sequence key={i} from={seq.fromFrame} durationInFrames={seq.durationInFrames}>
                   <TemplateRegistry templateName={seq.templateName} props={seq.props} />
@@ -310,7 +355,7 @@ return MyComposition;`;
       setComponent(null);
       setIsTranspiling(false);
     }
-  }, [code, duration, aspectRatio]);
+  }, [code, duration, aspectRatio, bgTrack]);
 
   // Catch unhandled errors from the player
   useEffect(() => {
@@ -392,9 +437,11 @@ return MyComposition;`;
               maxWidth: "100%",
               overflow: "hidden",
               borderRadius: "1rem",
+              position: "relative",
             }}
           >
             <Player
+              ref={playerRef}
               component={Component}
               durationInFrames={Math.max(1, duration * 30)}
               fps={30}
@@ -402,20 +449,42 @@ return MyComposition;`;
               compositionHeight={aspectRatio === "9:16" ? 1280 : aspectRatio === "1:1" ? 1080 : 720}
               style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
               acknowledgeRemotionLicense
-              controls
+              controls={variant === "editor"}
               loop
+              numberOfSharedAudioTags={5}
               errorFallback={({ error: playerError }) => (
                 <div style={{ color: "#f87171", padding: "16px", fontSize: "11px", fontFamily: "monospace", background: "#000", height: "100%" }}>
                   ⚠️ {playerError?.message?.split("\n")[0]?.slice(0, 200) || "Render error"}
                 </div>
               )}
             />
+            {variant === "clean" && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 border border-white/10">
+                <button
+                  type="button"
+                  className="p-1.5 rounded-full bg-white/10 text-white hover:bg-white/20"
+                  aria-label={cleanPlaying ? "Pause" : "Play"}
+                  onClick={() => {
+                    if (!playerRef.current) return;
+                    if (playerRef.current.isPlaying()) {
+                      playerRef.current.pause();
+                      setCleanPlaying(false);
+                    } else {
+                      playerRef.current.play();
+                      setCleanPlaying(true);
+                    }
+                  }}
+                >
+                  {cleanPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 pl-0.5" />}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
-};
+});
 
 export const VideoPreview = React.memo(VideoPreviewBase);
 VideoPreview.displayName = "VideoPreview";

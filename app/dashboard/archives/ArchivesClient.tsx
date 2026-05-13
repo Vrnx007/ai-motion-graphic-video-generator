@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Play, ArrowLeft, Trash2, Download, Eye } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { VideoPreview } from "@/components/VideoPreview";
+import { VideoPreview, type VideoPreviewHandle } from "@/components/VideoPreview";
+import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
+import { resolveBackgroundTrack } from "@/lib/music-tracks";
 
 
 const containerVariants: Variants = {
@@ -29,6 +31,46 @@ export default function ArchivesClient() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [recordingAnim, setRecordingAnim] = useState<any | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const previewRef = useRef<VideoPreviewHandle | null>(null);
+
+  useEffect(() => {
+    if (!recordingAnim) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await new Promise((r) => setTimeout(r, 900));
+        if (cancelled) return;
+        previewRef.current?.seekToStart();
+        previewRef.current?.play();
+        const blob = await recordRemotionPreviewToWebm({
+          durationSec: projectDurationSeconds(recordingAnim),
+          onProgress: setDownloadProgress,
+          warmupMs: 500,
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `video-${recordingAnim.id}-${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+        setDownloadProgress(100);
+      } catch (error: any) {
+        console.error("Recording error:", error);
+        alert(`Download failed: ${error.message}`);
+      } finally {
+        if (!cancelled) {
+          setRecordingAnim(null);
+          setDownloadingId(null);
+          setTimeout(() => setDownloadProgress(0), 1500);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recordingAnim]);
 
   useEffect(() => {
     fetchArchives();
@@ -48,61 +90,8 @@ export default function ArchivesClient() {
   };
 
   const handleDownloadArchive = async (anim: any) => {
-    try {
-      setDownloadingId(anim.id);
-      setRecordingAnim(anim);
-      setDownloadProgress(0);
-
-      const progressInterval = setInterval(() => {
-        setDownloadProgress((prev) => {
-          if (prev >= 95) return prev;
-          return prev + 5;
-        });
-      }, 2000);
-
-      const res = await fetch("/api/render-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoCode: anim.videoCode,
-          duration: anim.duration,
-          aspectRatio: anim.aspectRatio
-        }),
-      });
-
-      clearInterval(progressInterval);
-
-      if (!res.ok) {
-        let errorMsg = "Render failed";
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch {
-          errorMsg = `Server error (${res.status}): ${res.statusText}`;
-        }
-        throw new Error(errorMsg);
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `video-${anim.id}-${Date.now()}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-
-      setDownloadProgress(100);
-      alert("✅ Video downloaded successfully!");
-    } catch (error: any) {
-      console.error("Rendering error:", error);
-      alert(`❌ Download failed: ${error.message}`);
-    } finally {
-      setDownloadingId(null);
-      setRecordingAnim(null);
-      setTimeout(() => setDownloadProgress(0), 2000);
-    }
+    setDownloadingId(anim.id);
+    setRecordingAnim(anim);
   };
 
   const handleDeleteArchive = async (id: string) => {
@@ -200,7 +189,10 @@ export default function ArchivesClient() {
                     <p className="text-sm font-medium text-slate-300 line-clamp-2 leading-relaxed">"{anim.prompt}"</p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link href={`/dashboard/generate?resume=${anim.id}`} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600/15 hover:bg-emerald-600/25 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-colors text-emerald-400 border border-emerald-500/30">
+                      Edit
+                    </Link>
                     <Link href={`/share/${anim.id}`} className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-colors text-white border border-white/5">
                       <Eye size={14} /> View
                     </Link>
@@ -210,7 +202,7 @@ export default function ArchivesClient() {
                       className="flex-1 flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 hover:border-indigo-500 disabled:opacity-50 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-all"
                     >
                       {downloadingId === anim.id ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Download size={14} />}
-                      {downloadingId === anim.id ? "Rendering..." : "Save"}
+                      {downloadingId === anim.id ? "Recording…" : "WebM"}
                     </button>
                     <button
                       onClick={() => handleDeleteArchive(anim.id)}
@@ -237,9 +229,12 @@ export default function ArchivesClient() {
                 }`}
             >
               <VideoPreview
+                ref={previewRef}
                 code={recordingAnim.videoCode}
-                duration={recordingAnim.duration}
+                duration={projectDurationSeconds(recordingAnim)}
                 aspectRatio={recordingAnim.aspectRatio}
+                variant="editor"
+                musicSrc={resolveBackgroundTrack(recordingAnim.musicMood)}
               />
             </motion.div>
 
@@ -247,14 +242,14 @@ export default function ArchivesClient() {
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
                 <div className="text-left">
-                  <h3 className="text-2xl font-black uppercase tracking-tighter text-white">RENDERING <span className="text-indigo-400">MP4</span></h3>
-                  <p className="text-indigo-400/60 text-[10px] font-black uppercase tracking-[0.3em]">Processing on Server</p>
+                  <h3 className="text-2xl font-black uppercase tracking-tighter text-white">Recording <span className="text-indigo-400">WebM</span></h3>
+                  <p className="text-indigo-400/60 text-[10px] font-black uppercase tracking-[0.3em]">Browser export</p>
                 </div>
               </div>
 
               <p className="text-slate-400 font-medium text-sm leading-relaxed mb-4">
-                We are rendering your video on our high-performance engine for maximum quality.
-                This may take a few moments depending on complexity.
+                Recording the preview in your browser (WebM). For MP4, configure a Remotion render worker
+                (<code className="text-slate-500">REMOTION_RENDER_WEBHOOK_URL</code>).
               </p>
 
               <div className="w-full">

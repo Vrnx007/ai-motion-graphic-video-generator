@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { VideoPreview } from "@/components/VideoPreview";
+import { VideoPreview, type VideoPreviewHandle } from "@/components/VideoPreview";
 import { Play, Sparkles, ArrowLeft, Download, Loader2 } from "lucide-react";
-
+import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
+import { resolveBackgroundTrack } from "@/lib/music-tracks";
 
 export default function SharePage() {
   const { id } = useParams();
@@ -13,15 +14,21 @@ export default function SharePage() {
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const previewRef = useRef<VideoPreviewHandle | null>(null);
 
   useEffect(() => {
     const fetchProject = async () => {
       try {
         const res = await fetch(`/api/get-project?id=${id}`);
         const data = await res.json();
-        setProject(data);
+        if (!res.ok || data?.error || !data?.videoCode) {
+          setProject(null);
+        } else {
+          setProject(data);
+        }
       } catch (e) {
         console.error("Failed to load project");
+        setProject(null);
       } finally {
         setLoading(false);
       }
@@ -34,52 +41,25 @@ export default function SharePage() {
     try {
       setRecording(true);
       setDownloadProgress(0);
-
-      const progressInterval = setInterval(() => {
-        setDownloadProgress((prev) => {
-          if (prev >= 95) return prev;
-          return prev + 5;
-        });
-      }, 2000);
-
-      const res = await fetch("/api/render-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoCode: project.videoCode,
-          duration: project.duration,
-          aspectRatio: project.aspectRatio
-        }),
+      previewRef.current?.seekToStart();
+      previewRef.current?.play();
+      const blob = await recordRemotionPreviewToWebm({
+        durationSec: projectDurationSeconds(project),
+        onProgress: setDownloadProgress,
+        warmupMs: 600,
       });
-
-      clearInterval(progressInterval);
-
-      if (!res.ok) {
-        let errorMsg = "Render failed";
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch {
-          errorMsg = `Server error (${res.status}): ${res.statusText}`;
-        }
-        throw new Error(errorMsg);
-      }
-
-      const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `video-${project.id}-${Date.now()}.mp4`;
+      a.download = `video-${project.id}-${Date.now()}.webm`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-
+      setTimeout(() => window.URL.revokeObjectURL(url), 2000);
       setDownloadProgress(100);
-      alert("✅ Video downloaded successfully!");
     } catch (error: any) {
       console.error(error);
-      alert(`❌ Download failed: ${error.message}`);
+      alert(`Download failed: ${error.message}`);
     } finally {
       setRecording(false);
       setTimeout(() => setDownloadProgress(0), 2000);
@@ -91,7 +71,6 @@ export default function SharePage() {
 
   return (
     <div className="min-h-screen bg-[#0f172a] p-4 md:p-8 flex flex-col items-center justify-center relative">
-      {/* Back Button */}
       <Link
         href="/dashboard/archives"
         className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
@@ -110,40 +89,47 @@ export default function SharePage() {
       <div className={`w-full max-w-5xl bg-black rounded-[40px] shadow-2xl overflow-hidden ring-8 ring-white/5 border border-white/10 relative group ${project.aspectRatio === "9:16" ? "aspect-[9/16] h-[70vh] mx-auto" : project.aspectRatio === "1:1" ? "aspect-square" : "aspect-video"
         }`}>
         <div className="absolute -inset-4 bg-blue-600/20 blur-3xl opacity-50 pointer-events-none" />
-        <VideoPreview code={project.videoCode} duration={project.duration} aspectRatio={project.aspectRatio} />
+        <VideoPreview
+          ref={previewRef}
+          code={project.videoCode}
+          duration={projectDurationSeconds(project)}
+          aspectRatio={project.aspectRatio}
+          variant="clean"
+          musicSrc={resolveBackgroundTrack(project.musicMood)}
+        />
       </div>
 
-      <div className="mt-10 flex flex-col items-center gap-4">
-        {/* Download Button */}
+      <div className="mt-10 flex flex-col items-center gap-4 max-w-lg text-center">
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          Export uses in-browser recording (WebM). For MP4, deploy a Remotion render worker and set{" "}
+          <code className="text-slate-400">REMOTION_RENDER_WEBHOOK_URL</code>.
+        </p>
         <button
           onClick={handleDownload}
           disabled={recording}
           className="inline-flex items-center gap-3 px-8 py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-wait text-white rounded-2xl font-black uppercase text-sm tracking-widest transition-all shadow-[0_10px_30px_rgba(59,130,246,0.4)] hover:shadow-[0_15px_40px_rgba(59,130,246,0.5)] hover:-translate-y-1"
         >
           {recording ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-          {recording ? "Rendering MP4..." : "Download MP4"}
+          {recording ? "Recording WebM…" : "Download WebM"}
         </button>
 
-        {recording && (
-          <div className="w-full max-w-md space-y-2">
-            <p className="text-[11px] text-blue-400/70 font-medium italic animate-pulse text-center">
-              Processing your high-quality MP4 on our engine... {downloadProgress > 0 ? `${downloadProgress}%` : ''}
-            </p>
-            {downloadProgress > 0 && (
-              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-            )}
+        {recording && downloadProgress > 0 && (
+          <div className="w-full space-y-2">
+            <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/10">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
           </div>
         )}
 
-        <p className="text-slate-400 text-sm font-bold tracking-[0.2em] uppercase italic bg-slate-900/50 px-6 py-2 rounded-full border border-white/5 inline-flex items-center gap-2">
-          <Sparkles size={14} className="text-blue-400" />
-          Prompt: {project.prompt}
-        </p>
+        <Link
+          href={`/dashboard/generate?resume=${project.id}`}
+          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold uppercase tracking-widest"
+        >
+          Open in studio
+        </Link>
       </div>
     </div>
   );

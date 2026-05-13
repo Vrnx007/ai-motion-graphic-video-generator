@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Local Remotion / FFmpeg binaries (platform-specific; do not commit)
 /lib/ffmpeg/
+
+# Cursor agent skills (local install; do not commit)
+.agents/
+skills-lock.json

@@ -50,6 +50,11 @@ function fallbackScene(sceneName: string, label: string): string {
 };`;
 }
 
+export type StitchOptions = {
+  /** Embedded into template_sequence JSON for Remotion <Audio /> */
+  musicSrc?: string;
+};
+
 /**
  * Takes an array of generated scene code strings and produces
  * a single MyComposition component that plays them in sequence.
@@ -57,7 +62,7 @@ function fallbackScene(sceneName: string, label: string): string {
  * Each scene is validated individually — broken scenes get a safe fallback
  * so one bad AI response can never crash the entire composition.
  */
-export function stitchScenes(scenes: SceneCode[]): string {
+export function stitchScenes(scenes: SceneCode[], options?: StitchOptions): string {
   const fps = 30;
   let currentFrame = 0;
 
@@ -85,10 +90,14 @@ export function stitchScenes(scenes: SceneCode[]): string {
       })
       .filter(Boolean);
 
-    return JSON.stringify({
+    const out: Record<string, unknown> = {
       type: "template_sequence",
       sequences: combinedJson,
-    });
+    };
+    if (options?.musicSrc?.trim()) {
+      out.musicSrc = options.musicSrc.trim();
+    }
+    return JSON.stringify(out);
   }
 
   // ── Legacy generative-code engine (Raw React / JSX) ──

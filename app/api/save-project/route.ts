@@ -8,8 +8,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { videoCode, prompt, duration, aspectRatio } = await req.json();
-    
+    const {
+      videoCode,
+      prompt,
+      duration,
+      aspectRatio,
+      scenes: scenesPayload,
+      videoType: videoTypePayload,
+      musicMood: musicMoodPayload,
+    } = await req.json();
+
     if (!videoCode || !prompt) {
       return NextResponse.json({ error: "Missing video code or prompt" }, { status: 400 });
     }
@@ -19,7 +27,11 @@ export async function POST(req: Request) {
     console.log("[SAVE] Aspect Ratio:", aspectRatio);
     const validatedDuration = Math.round(Math.min(Math.max(Number(duration) || 10, 5), 300));
 
-    // 3. Create project using the verified user ID
+    const scenesJson =
+      scenesPayload !== undefined && scenesPayload !== null
+        ? (Array.isArray(scenesPayload) ? scenesPayload : scenesPayload)
+        : undefined;
+
     const project = await db.project.create({
       data: {
         videoCode,
@@ -27,6 +39,18 @@ export async function POST(req: Request) {
         duration: validatedDuration,
         aspectRatio: aspectRatio || "16:9",
         userId: session.user.id,
+        scenes:
+          scenesJson === undefined
+            ? undefined
+            : (JSON.parse(JSON.stringify(scenesJson)) as object),
+        videoType:
+          typeof videoTypePayload === "string" && videoTypePayload.length > 0
+            ? videoTypePayload.slice(0, 64)
+            : "general",
+        musicMood:
+          typeof musicMoodPayload === "string" && musicMoodPayload.length > 0
+            ? musicMoodPayload.slice(0, 120)
+            : null,
       },
     });
 

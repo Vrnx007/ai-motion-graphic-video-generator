@@ -6,6 +6,9 @@ import { FeatureShowcase } from "./FeatureShowcase";
 import { SplitScreen } from "./SplitScreen";
 import { StatCounter } from "./StatCounter";
 import { LogoReveal } from "./LogoReveal";
+import { ProductOrbit3D } from "./ProductOrbit3D";
+import { DemoBrowserWalkthrough } from "./DemoBrowserWalkthrough";
+import { LottieOverlay } from "./LottieOverlay";
 
 export interface TemplateProps {
   templateName: string;
@@ -26,6 +29,12 @@ export const TemplateRegistry: React.FC<TemplateProps> = ({ templateName, props 
       return <StatCounter {...props} />;
     case "LogoReveal":
       return <LogoReveal {...props} />;
+    case "ProductOrbit3D":
+      return <ProductOrbit3D {...props} />;
+    case "DemoBrowserWalkthrough":
+      return <DemoBrowserWalkthrough {...props} />;
+    case "LottieOverlay":
+      return <LottieOverlay {...props} />;
     default:
       // Fallback — render as KineticHero since it handles all basic props
       return <KineticHero {...props} />;

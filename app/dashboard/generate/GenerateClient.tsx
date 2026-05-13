@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { VideoPreview } from "@/components/VideoPreview";
+import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { VideoPreview, type VideoPreviewHandle } from "@/components/VideoPreview";
 import BrandPreview from "@/components/BrandPreview";
+import { BrandImagePicker } from "@/components/BrandImagePicker";
 import SceneTimeline, { Scene } from "@/components/SceneTimeline";
 import { stitchScenes, SceneCode } from "@/lib/scene-stitcher";
+import { resolveBackgroundTrack } from "@/lib/music-tracks";
+import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import {
   Loader2, Wand2, Share2, Check, Download, LayoutDashboard, X,
   Globe, Sparkles, Film, Megaphone, Monitor, Presentation, Play,
@@ -33,6 +37,18 @@ const DIRECTOR_STYLES = [
   { id: "playful", label: "Playful", icon: Sparkles, prompt: "Fun and playful, bouncy animations, bright colors, rounded shapes, cartoon-like" },
 ];
 
+const GOD_TEMPLATE_IDS = [
+  "KineticHero",
+  "BentoGrid",
+  "FeatureShowcase",
+  "SplitScreen",
+  "StatCounter",
+  "LogoReveal",
+  "ProductOrbit3D",
+  "DemoBrowserWalkthrough",
+  "LottieOverlay",
+] as const;
+
 const PLATFORM_PRESETS = [
   { id: "youtube", label: "YouTube", aspect: "16:9", duration: 30 },
   { id: "tiktok", label: "TikTok", aspect: "9:16", duration: 15 },
@@ -41,12 +57,13 @@ const PLATFORM_PRESETS = [
   { id: "twitter", label: "X / Twitter", aspect: "16:9", duration: 15 },
   { id: "instagram", label: "IG Post", aspect: "1:1", duration: 15 },
   { id: "shorts", label: "YT Shorts", aspect: "9:16", duration: 30 },
-  { id: "website", label: "Website", aspect: "16:9", duration: 10 },
+  { id: "website", label: "Website", aspect: "16:9", duration: 60 },
 ];
 
 type Step = "input" | "brand-review" | "script" | "generating" | "preview";
 
 export default function GenerateClient() {
+  const searchParams = useSearchParams();
   // Core state
   const [step, setStep] = useState<Step>("input");
   const [prompt, setPrompt] = useState("");
@@ -66,6 +83,7 @@ export default function GenerateClient() {
 
   // Video state
   const [videoCode, setVideoCode] = useState("");
+  const [sceneCodes, setSceneCodes] = useState<SceneCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<number | null>(null);
 
@@ -86,6 +104,33 @@ export default function GenerateClient() {
   const [generatingVariations, setGeneratingVariations] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoPreviewRef = useRef<VideoPreviewHandle | null>(null);
+  /** From generate-script; used for background track selection (Phase 3) */
+  const [musicMood, setMusicMood] = useState<string | null>(null);
+
+  useEffect(() => {
+    const rid = searchParams.get("resume");
+    if (!rid) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/get-project?id=${encodeURIComponent(rid)}`);
+        const p = await res.json();
+        if (!p?.videoCode || p.error) return;
+        setVideoCode(p.videoCode);
+        setPrompt(p.prompt || "");
+        setDuration(Math.max(5, Math.min(300, Number(p.duration) || 10)));
+        setAspectRatio(p.aspectRatio || "16:9");
+        setVideoType(typeof p.videoType === "string" ? p.videoType : "general");
+        if (Array.isArray(p.scenes) && p.scenes.length > 0) setScenes(p.scenes);
+        else setScenes([]);
+        setMusicMood(typeof p.musicMood === "string" ? p.musicMood : null);
+        setSceneCodes([]);
+        setStep("preview");
+      } catch (e) {
+        console.error("[resume project]", e);
+      }
+    })();
+  }, [searchParams]);
 
   // ── Image Upload Handler ──
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +194,7 @@ export default function GenerateClient() {
     const preset = PLATFORM_PRESETS.find(p => p.id === presetId);
     if (preset) {
       setAspectRatio(preset.aspect);
-      setDuration(preset.duration);
+      // Do not change duration — presets used to force "Website" to 10s and overwrote long videos.
       setSelectedPlatform(presetId);
     }
   };
@@ -189,15 +234,24 @@ export default function GenerateClient() {
   // ── Step 2: Generate Script ──
   const handleGenerateScript = async () => {
     setGeneratingScript(true);
+    const requestedDuration = duration;
     try {
       const res = await fetch("/api/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration, brandKit }),
+        body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration: requestedDuration, brandKit }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setScenes(data.scenes || []);
+      const nextScenes = data.scenes || [];
+      setScenes(nextScenes);
+      setMusicMood(typeof data.musicMood === "string" ? data.musicMood : null);
+      setSceneCodes([]);
+      const td = Number(data.totalDuration);
+      const sceneSum = nextScenes.reduce((s: number, sc: Scene) => s + (Number(sc.duration) || 0), 0);
+      if (Number.isFinite(td) && td >= 5 && td <= 300) setDuration(td);
+      else if (Number.isFinite(sceneSum) && sceneSum >= 5 && sceneSum <= 300) setDuration(sceneSum);
+      else setDuration(requestedDuration);
       setStep("script");
     } catch (err: any) {
       alert(`Script generation failed: ${err.message}`);
@@ -211,7 +265,7 @@ export default function GenerateClient() {
     if (scenes.length === 0) return;
     setLoading(true);
     setStep("generating");
-    const sceneCodes: SceneCode[] = [];
+    const collected: SceneCode[] = [];
 
     const cleanAiCode = (raw: string) => {
       return raw
@@ -251,10 +305,10 @@ export default function GenerateClient() {
         
         if (!isValid) throw new Error("AI code was truncated or invalid.");
         
-        sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
+        collected.push({ id: scene.id, code: safeCode, duration: scene.duration });
       } catch (err: any) {
         console.error(`Scene ${scene.id} failed:`, err);
-        sceneCodes.push({
+        collected.push({
           id: scene.id,
           code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
           duration: scene.duration,
@@ -263,13 +317,15 @@ export default function GenerateClient() {
     }
 
     setGeneratingSceneId(null);
-    const stitched = stitchScenes(sceneCodes);
+    const track = resolveBackgroundTrack(musicMood);
+    const stitched = stitchScenes(collected, { musicSrc: track });
+    setSceneCodes(collected);
     setVideoCode(stitched);
     setLoading(false);
     setStep("preview");
     
     // Auto-save the project to the library
-    autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0));
+    autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0), scenes, { musicMood: musicMood ?? undefined });
   };
 
   // ── Quick Generate (handles long videos by auto-scripting) ──
@@ -299,9 +355,10 @@ export default function GenerateClient() {
         if (!scriptRes.ok) throw new Error(scriptData.error);
         const autoScenes = scriptData.scenes || [];
         setScenes(autoScenes);
+        setMusicMood(typeof scriptData.musicMood === "string" ? scriptData.musicMood : null);
 
         // 2. Generate Each Scene
-        const sceneCodes: SceneCode[] = [];
+        const collected: SceneCode[] = [];
         for (const scene of autoScenes) {
           setGeneratingSceneId(scene.id);
           const dirStyle = DIRECTOR_STYLES.find(s => s.id === directorStyle);
@@ -329,21 +386,25 @@ export default function GenerateClient() {
           }
           if (!isValid) {
             console.warn(`Quick generate scene ${scene.id} truncated, using fallback`);
-            sceneCodes.push({
+            collected.push({
               id: scene.id,
               code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
               duration: scene.duration,
             });
           } else {
-            sceneCodes.push({ id: scene.id, code: safeCode, duration: scene.duration });
+            collected.push({ id: scene.id, code: safeCode, duration: scene.duration });
           }
         }
         
         setGeneratingSceneId(null);
-        const stitched = stitchScenes(sceneCodes);
+        const track = resolveBackgroundTrack(
+          typeof scriptData.musicMood === "string" ? scriptData.musicMood : musicMood
+        );
+        const stitched = stitchScenes(collected, { musicSrc: track });
+        setSceneCodes(collected);
         setVideoCode(stitched);
         setStep("preview");
-        autoSaveProject(stitched, duration);
+        autoSaveProject(stitched, duration, autoScenes, { musicMood: typeof scriptData.musicMood === "string" ? scriptData.musicMood : undefined });
       } else {
         // Short video: single generation is fine
         const res = await fetch("/api/generate-video", {
@@ -368,8 +429,9 @@ export default function GenerateClient() {
         
         setVideoCode(safeCode);
         if (data.duration) setDuration(data.duration);
+        setSceneCodes([]);
         setStep("preview");
-        autoSaveProject(safeCode, data.duration || duration);
+        autoSaveProject(safeCode, data.duration || duration, undefined, { musicMood: musicMood ?? undefined });
       }
     } catch (err: any) {
       alert(`Generation failed: ${err.message}`);
@@ -380,12 +442,20 @@ export default function GenerateClient() {
   };
 
   // ── Auto Save ──
-  const autoSaveProject = async (codeToSave: string, currentDuration: number) => {
+  const autoSaveProject = async (codeToSave: string, currentDuration: number, scenePayload?: Scene[], extra?: { musicMood?: string }) => {
     try {
       const res = await fetch("/api/save-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoCode: codeToSave, prompt: getEnhancedPrompt(), duration: currentDuration, aspectRatio }),
+        body: JSON.stringify({
+          videoCode: codeToSave,
+          prompt: getEnhancedPrompt(),
+          duration: currentDuration,
+          aspectRatio,
+          videoType,
+          scenes: scenePayload ?? (scenes.length > 0 ? scenes : undefined),
+          musicMood: extra?.musicMood ?? musicMood ?? undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.id) {
@@ -404,7 +474,15 @@ export default function GenerateClient() {
       const res = await fetch("/api/save-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoCode, prompt, duration, aspectRatio }),
+        body: JSON.stringify({
+          videoCode,
+          prompt,
+          duration: scenes.length > 0 ? totalSceneDuration : duration,
+          aspectRatio,
+          videoType,
+          scenes: scenes.length > 0 ? scenes : undefined,
+          musicMood: musicMood ?? undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -425,39 +503,27 @@ export default function GenerateClient() {
     if (!videoCode) return;
     setRendering(true);
     setDownloadProgress(0);
+    const exportDurationSec = projectDurationSeconds({
+      duration,
+      scenes: scenes.length > 0 ? scenes : undefined,
+    });
     try {
-      const playerEl = document.querySelector("[data-remotion-player='true']");
-      const videoEl = playerEl?.querySelector("video") as HTMLVideoElement | null;
-      const canvasEl = playerEl?.querySelector("canvas") as HTMLCanvasElement | null;
-      let stream: MediaStream | null = null;
-      if (videoEl && (videoEl as any).captureStream) stream = (videoEl as any).captureStream(30);
-      else if (canvasEl && (canvasEl as any).captureStream) stream = (canvasEl as any).captureStream(30);
-      if (!stream) throw new Error("Could not capture stream. Play the preview first.");
-
-      const mimeType = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
-        .find(m => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
-      const chunks: Blob[] = [];
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-      const totalMs = duration * 1000;
-      const startTime = Date.now();
-      const prog = setInterval(() => setDownloadProgress(Math.min(95, Math.round(((Date.now()-startTime)/totalMs)*100))), 200);
-      recorder.start(100);
-
-      await new Promise<void>((resolve, reject) => {
-        recorder.onstop = () => resolve();
-        recorder.onerror = e => reject(e);
-        setTimeout(() => { recorder.stop(); clearInterval(prog); }, totalMs + 800);
+      videoPreviewRef.current?.seekToStart();
+      videoPreviewRef.current?.play();
+      const blob = await recordRemotionPreviewToWebm({
+        durationSec: exportDurationSec,
+        onProgress: setDownloadProgress,
+        warmupMs: 600,
       });
-
       setDownloadProgress(100);
-      const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       const a = document.createElement("a");
-      a.href = url; a.download = `animation-${Date.now()}.webm`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      a.href = url;
+      a.download = `animation-${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setShowDownloadSuccess(true);
     } catch (err: any) {
@@ -470,14 +536,112 @@ export default function GenerateClient() {
 
   // ── Scene handlers ──
   const handleUpdateScene = (id: number, updates: Partial<Scene>) => {
-    setScenes(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    if (typeof updates.duration === "number") {
+      const nc = sceneCodes.map((c) =>
+        c.id === id ? { ...c, duration: updates.duration! } : c
+      );
+      setSceneCodes(nc);
+      if (step === "preview" && nc.length) {
+        setVideoCode(stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) }));
+      }
+    }
   };
   const handleDeleteScene = (id: number) => {
-    setScenes(prev => prev.filter(s => s.id !== id));
+    const ns = scenes.filter((s) => s.id !== id);
+    const nc = sceneCodes.filter((c) => c.id !== id);
+    setScenes(ns);
+    setSceneCodes(nc);
+    if (step === "preview") {
+      if (nc.length) {
+        setVideoCode(stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) }));
+      } else {
+        setVideoCode("");
+      }
+    }
   };
-  const handleRegenerateScene = (id: number) => {
-    // For now, just mark it - full regeneration would re-call generate-video for that scene
-    alert("Scene regeneration coming soon! Edit the text and regenerate all.");
+
+  const moveScene = (id: number, dir: -1 | 1) => {
+    const i = scenes.findIndex((s) => s.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= scenes.length) return;
+    const ns = [...scenes];
+    [ns[i], ns[j]] = [ns[j], ns[i]];
+    const ci = sceneCodes.findIndex((c) => c.id === id);
+    const cj = ci + dir;
+    if (ci < 0 || cj < 0 || cj >= sceneCodes.length) {
+      setScenes(ns);
+      return;
+    }
+    const nc = [...sceneCodes];
+    [nc[ci], nc[cj]] = [nc[cj], nc[ci]];
+    setScenes(ns);
+    setSceneCodes(nc);
+    if (step === "preview" && nc.length) {
+      setVideoCode(stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) }));
+    }
+  };
+  const handleRegenerateScene = async (id: number) => {
+    const scene = scenes.find((s) => s.id === id);
+    if (!scene) return;
+    if (!sceneCodes.some((c) => c.id === id)) {
+      alert("Generate the full video first, then you can regenerate individual scenes.");
+      return;
+    }
+    setGeneratingSceneId(id);
+    const cleanAiCode = (raw: string) =>
+      raw
+        .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
+        .replace(/\n?```\s*$/gim, "")
+        .replace(/^(Here is the code:|This is the code:|Certainly!|Sure, here is).*$/gim, "")
+        .trim();
+    try {
+      const dirStyle = DIRECTOR_STYLES.find((s) => s.id === directorStyle);
+      const res = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ""}`,
+          duration: scene.duration,
+          aspectVideo: aspectRatio,
+          brandKit,
+          scene,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const safeCode = cleanAiCode(data.videoCode);
+      let isValid = true;
+      if (safeCode.trim().startsWith("{")) {
+        try {
+          JSON.parse(safeCode);
+        } catch {
+          isValid = false;
+        }
+      } else {
+        try {
+          Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" });
+        } catch {
+          isValid = false;
+        }
+      }
+      if (!isValid) throw new Error("Invalid AI output");
+      const nc = sceneCodes.map((c) =>
+        c.id === id ? { ...c, code: safeCode, duration: scene.duration } : c
+      );
+      setSceneCodes(nc);
+      const stitched = stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) });
+      if (step === "preview" && nc.length) {
+        setVideoCode(stitched);
+        autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0), scenes, {
+          musicMood: musicMood ?? undefined,
+        });
+      }
+    } catch (e: any) {
+      alert(`Regenerate failed: ${e?.message || "Unknown error"}`);
+    } finally {
+      setGeneratingSceneId(null);
+    }
   };
 
   const totalSceneDuration = scenes.reduce((s, sc) => s + sc.duration, 0);
@@ -546,6 +710,12 @@ export default function GenerateClient() {
                   </div>
                 </div>
                 {extractingBrand && <p className="text-[9px] text-emerald-400/70 animate-pulse ml-1">Extracting brand identity...</p>}
+                {brandKit && step === "brand-review" && (
+                  <p className="text-[9px] text-slate-500 leading-relaxed ml-1 border-l-2 border-emerald-500/40 pl-2">
+                    URL-only runs use public HTML (no login). Quality depends on the site; refine your creative directive
+                    and curate images below before script for the cleanest result.
+                  </p>
+                )}
               </div>
 
               {/* Brand Preview (compact) */}
@@ -695,7 +865,14 @@ export default function GenerateClient() {
 
           {/* ── Brand Review (expanded) ── */}
           {step === "brand-review" && brandKit && (
-            <BrandPreview brand={brandKit}/>
+            <div className="space-y-4">
+              <BrandPreview brand={brandKit} showImageGallery={false} />
+              <BrandImagePicker
+                extractKey={String(brandKit.id ?? brandKit.sourceUrl ?? "brand")}
+                images={Array.isArray(brandKit.images) ? brandKit.images : []}
+                onChange={(next) => setBrandKit((prev: any) => (prev ? { ...prev, images: next } : prev))}
+              />
+            </div>
           )}
 
           {/* ── Scene Timeline ── */}
@@ -709,8 +886,82 @@ export default function GenerateClient() {
               onRegenerateScene={handleRegenerateScene}
               onReorderScenes={setScenes}
               generatingSceneId={generatingSceneId}
+              hideSegmentBar={step === "preview"}
+              onMoveScene={moveScene}
             />
           )}
+
+          {activeSceneId !== null &&
+            scenes.some((s) => s.id === activeSceneId) &&
+            (step === "script" || step === "preview") && (
+              <div className="rounded-xl border border-white/10 bg-[#020617]/80 p-3 space-y-2">
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Scene editor</p>
+                {(() => {
+                  const sc = scenes.find((s) => s.id === activeSceneId)!;
+                  return (
+                    <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-custom">
+                      <label className="block text-[8px] text-slate-500 font-bold uppercase">Title</label>
+                      <input
+                        className="w-full text-xs p-2 rounded-lg bg-white/5 border border-white/10 text-white"
+                        value={sc.title}
+                        onChange={(e) => handleUpdateScene(sc.id, { title: e.target.value })}
+                      />
+                      <label className="block text-[8px] text-slate-500 font-bold uppercase">On-screen text</label>
+                      <input
+                        className="w-full text-xs p-2 rounded-lg bg-white/5 border border-white/10 text-white"
+                        value={sc.text}
+                        onChange={(e) => handleUpdateScene(sc.id, { text: e.target.value })}
+                      />
+                      <label className="block text-[8px] text-slate-500 font-bold uppercase">Visual direction</label>
+                      <textarea
+                        className="w-full text-[11px] p-2 rounded-lg bg-white/5 border border-white/10 text-slate-200 resize-none h-16"
+                        value={sc.visual}
+                        onChange={(e) => handleUpdateScene(sc.id, { visual: e.target.value })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[8px] text-slate-500 font-bold uppercase">Duration (s)</label>
+                          <input
+                            type="number"
+                            min={3}
+                            max={120}
+                            className="w-full text-xs p-2 rounded-lg bg-white/5 border border-white/10 text-white"
+                            value={sc.duration}
+                            onChange={(e) =>
+                              handleUpdateScene(sc.id, { duration: Math.max(3, Math.min(120, parseInt(e.target.value, 10) || 3)) })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[8px] text-slate-500 font-bold uppercase">Template</label>
+                          <select
+                            className="w-full text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 text-white"
+                            value={sc.templateName || ""}
+                            onChange={(e) =>
+                              handleUpdateScene(sc.id, { templateName: e.target.value || undefined })
+                            }
+                          >
+                            <option value="">Auto</option>
+                            {GOD_TEMPLATE_IDS.map((tid) => (
+                              <option key={tid} value={tid}>
+                                {tid}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <label className="block text-[8px] text-slate-500 font-bold uppercase">Image URL</label>
+                      <input
+                        className="w-full text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 text-slate-300"
+                        value={sc.imageUrl || ""}
+                        placeholder="https://..."
+                        onChange={(e) => handleUpdateScene(sc.id, { imageUrl: e.target.value || undefined })}
+                      />
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
           {/* ── Action Buttons ── */}
           <div className="grid gap-3 mt-auto pt-4">
@@ -794,7 +1045,7 @@ export default function GenerateClient() {
                   </div>
                 )}
 
-                <button onClick={() => { setStep("input"); setVideoCode(""); setScenes([]); }}
+                <button onClick={() => { setStep("input"); setVideoCode(""); setScenes([]); setSceneCodes([]); setMusicMood(null); }}
                   className="text-[9px] text-slate-500 hover:text-white transition-colors font-bold uppercase tracking-widest text-center py-2">
                   ← Start Over
                 </button>
@@ -813,9 +1064,12 @@ export default function GenerateClient() {
           <motion.div whileHover={{scale:1.01}}
             className="relative aspect-video bg-[#020617] rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden border border-white/10">
             <VideoPreview
+              ref={videoPreviewRef}
               code={videoCode}
               duration={scenes.length > 0 ? totalSceneDuration : duration}
               aspectRatio={aspectRatio}
+              variant={step === "preview" ? "clean" : "editor"}
+              musicSrc={resolveBackgroundTrack(musicMood)}
             />
           </motion.div>
         </motion.div>

@@ -2,9 +2,10 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
   Zap, AlertCircle, Lightbulb, Layers, Star, ArrowRight,
-  GripVertical, RefreshCw, Trash, Edit, Play, Clock,
+  RefreshCw, Trash, Play, Clock, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 export interface Scene {
@@ -15,6 +16,7 @@ export interface Scene {
   text: string;
   visual: string;
   imageUrl?: string;
+  templateName?: string;
 }
 
 interface SceneTimelineProps {
@@ -26,9 +28,11 @@ interface SceneTimelineProps {
   onRegenerateScene: (id: number) => void;
   onReorderScenes: (scenes: Scene[]) => void;
   generatingSceneId?: number | null;
+  hideSegmentBar?: boolean;
+  onMoveScene?: (id: number, direction: -1 | 1) => void;
 }
 
-const SCENE_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
+const SCENE_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   hook: { icon: Zap, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   problem: { icon: AlertCircle, color: "text-red-400 bg-red-500/10 border-red-500/20" },
   solution: { icon: Lightbulb, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
@@ -48,6 +52,8 @@ export default function SceneTimeline({
   onDeleteScene,
   onRegenerateScene,
   generatingSceneId,
+  hideSegmentBar = false,
+  onMoveScene,
 }: SceneTimelineProps) {
   const totalDuration = scenes.reduce((sum, s) => sum + s.duration, 0);
 
@@ -68,7 +74,8 @@ export default function SceneTimeline({
         </div>
       </div>
 
-      {/* Timeline bar */}
+      {/* Timeline bar — optional; hidden on preview for a cleaner canvas */}
+      {!hideSegmentBar && (
       <div className="flex h-2 rounded-full overflow-hidden bg-white/5 border border-white/10">
         {scenes.map((scene, i) => {
           const width = (scene.duration / totalDuration) * 100;
@@ -88,6 +95,7 @@ export default function SceneTimeline({
           );
         })}
       </div>
+      )}
 
       {/* Scene cards */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-custom">
@@ -139,6 +147,26 @@ export default function SceneTimeline({
 
               {/* Actions (visible on hover) */}
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {onMoveScene && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMoveScene(scene.id, -1); }}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-400"
+                      title="Move earlier"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMoveScene(scene.id, 1); }}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-400"
+                      title="Move later"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onRegenerateScene(scene.id); }}
                   className="p-1 rounded-md bg-white/10 hover:bg-blue-500/30 text-slate-400 hover:text-blue-400 transition-colors"
