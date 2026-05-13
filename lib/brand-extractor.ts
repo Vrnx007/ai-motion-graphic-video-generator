@@ -24,6 +24,7 @@ import {
   findFirstUsableColor,
   rgbSaturation,
 } from "./color-utils";
+import { isUrlSafeForServerFetch } from "./url-safety";
 
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -98,6 +99,9 @@ export interface BrandData {
   tone: string | null;
   style: string | null;
   images: Array<{ url: string; alt: string; context: string }>;
+  testimonials: Array<{ quote: string; author?: string; role?: string }>;
+  integrations: Array<{ name: string; logoUrl?: string | null }>;
+  pricingCues: string[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -107,11 +111,13 @@ async function safeFetch(
   opts: { timeout?: number; acceptImage?: boolean } = {}
 ): Promise<Response | null> {
   try {
+    const safe = isUrlSafeForServerFetch(url);
+    if (!safe.ok) return null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeout ?? FETCH_TIMEOUT);
     const headers: Record<string, string> = { "User-Agent": CHROME_UA };
     if (opts.acceptImage) headers["Accept"] = "image/*";
-    const res = await fetch(url, { signal: controller.signal, headers, redirect: "follow" });
+    const res = await fetch(safe.url.toString(), { signal: controller.signal, headers, redirect: "follow" });
     clearTimeout(timer);
     if (!res.ok) return null;
     return res;
@@ -619,6 +625,64 @@ function extractContent($: cheerio.CheerioAPI): {
   return { headline, subheadline, features, cta, fonts: { heading: headingFont, body: bodyFont } };
 }
 
+function extractTestimonials($: cheerio.CheerioAPI, baseUrl: string): Array<{ quote: string; author?: string; role?: string }> {
+  const out: Array<{ quote: string; author?: string; role?: string }> = [];
+  const seen = new Set<string>();
+  $("blockquote, [class*='testimonial'], [data-testid*='testimonial']").each((_, el) => {
+    if (out.length >= 5) return;
+    const text = $(el).text().replace(/\s+/g, " ").trim();
+    if (text.length < 24 || text.length > 400) return;
+    const key = text.slice(0, 80);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const author =
+      $(el).find("cite, footer, .author, [class*='author']").first().text().trim() || undefined;
+    out.push({ quote: text.slice(0, 320), author: author || undefined });
+  });
+  return out;
+}
+
+function extractIntegrations($: cheerio.CheerioAPI, baseUrl: string): Array<{ name: string; logoUrl?: string | null }> {
+  const out: Array<{ name: string; logoUrl?: string | null }> = [];
+  const seen = new Set<string>();
+  $("[class*='integration'], [class*='partner'], [class*='logo-wall'] img, [class*='logos'] img").each((_, el) => {
+    if (out.length >= 12) return;
+    const alt = ($(el).attr("alt") || "").trim();
+    const src = $(el).attr("src");
+    if (!alt || alt.length < 2 || alt.length > 80) return;
+    const lower = alt.toLowerCase();
+    if (lower.includes("logo") || lower.includes("icon")) {
+      const name = alt.replace(/\s*logo\s*/i, "").trim();
+      if (!name || seen.has(name.toLowerCase())) return;
+      seen.add(name.toLowerCase());
+      const logoUrl = src ? resolveUrl(src, baseUrl) : undefined;
+      out.push({ name, logoUrl: logoUrl || null });
+    }
+  });
+  return out;
+}
+
+function extractPricingCues($: cheerio.CheerioAPI): string[] {
+  const cues: string[] = [];
+  const body = $("body").text();
+  const re = /\$[\d,]+(?:\.\d{2})?(?:\s*\/\s*(?:mo|month|yr|year))?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null && cues.length < 8) {
+    const s = m[0].trim();
+    if (!cues.includes(s)) cues.push(s);
+  }
+  $("[class*='pricing'], [class*='plan']").each((_, el) => {
+    if (cues.length >= 8) return false;
+    const t = $(el).text().replace(/\s+/g, " ").trim();
+    if (t.length > 8 && t.length < 120 && /free|trial|\/|mo|month|\$/i.test(t)) {
+      const key = t.slice(0, 80);
+      if (!cues.includes(key)) cues.push(key);
+    }
+    return undefined;
+  });
+  return cues.slice(0, 8);
+}
+
 // ─── Main Pipeline ───────────────────────────────────────
 
 export async function extractFromUrl(url: string): Promise<BrandData> {
@@ -639,6 +703,10 @@ export async function extractFromUrl(url: string): Promise<BrandData> {
     Promise.resolve(extractContent($)),
     Promise.resolve(extractImages($, url)),
   ]);
+
+  const testimonials = extractTestimonials($, url);
+  const integrations = extractIntegrations($, url);
+  const pricingCues = extractPricingCues($);
 
   console.log(`[BrandExtractor] Logo: ${logoUrl ? "found" : "not found"}`);
   console.log(`[BrandExtractor] Site brand color: ${siteBrandColor || "not found"}`);
@@ -690,6 +758,9 @@ export async function extractFromUrl(url: string): Promise<BrandData> {
     tone,
     style,
     images: siteImages,
+    testimonials,
+    integrations,
+    pricingCues,
   };
 
   console.log("[BrandExtractor] Extraction complete:", {

@@ -47,6 +47,9 @@ const GOD_TEMPLATE_IDS = [
   "ProductOrbit3D",
   "DemoBrowserWalkthrough",
   "LottieOverlay",
+  "IntegrationShowcase",
+  "TestimonialSpotlight",
+  "ComparisonSplit",
 ] as const;
 
 const PLATFORM_PRESETS = [
@@ -142,6 +145,8 @@ export default function GenerateClient() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<VideoPreviewHandle | null>(null);
+  /** Persisted project id for update saves and resume. */
+  const [projectId, setProjectId] = useState<string | null>(null);
   /** From generate-script; used for background track selection (Phase 3) */
   const [musicMood, setMusicMood] = useState<string | null>(null);
 
@@ -154,6 +159,10 @@ export default function GenerateClient() {
         const p = await res.json();
         if (!p?.videoCode || p.error) return;
         setVideoCode(p.videoCode);
+        setProjectId(typeof p.id === "string" ? p.id : null);
+        if (typeof p.shareToken === "string") {
+          setShareUrl(`${window.location.origin}/share/${p.shareToken}`);
+        }
         setPrompt(p.prompt || "");
         setDuration(Math.max(5, Math.min(300, Number(p.duration) || 10)));
         setAspectRatio(p.aspectRatio || "16:9");
@@ -481,6 +490,7 @@ export default function GenerateClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          projectId: projectId ?? undefined,
           videoCode: codeToSave,
           prompt: getEnhancedPrompt(),
           duration: currentDuration,
@@ -492,7 +502,10 @@ export default function GenerateClient() {
       });
       const data = await res.json();
       if (res.ok && data.id) {
-        setShareUrl(`${window.location.origin}/share/${data.id}`);
+        setProjectId(data.id);
+        if (typeof data.shareToken === "string") {
+          setShareUrl(`${window.location.origin}/share/${data.shareToken}`);
+        }
       }
     } catch (err) {
       console.error("Auto-save failed:", err);
@@ -508,6 +521,7 @@ export default function GenerateClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          projectId: projectId ?? undefined,
           videoCode,
           prompt,
           duration: scenes.length > 0 ? totalSceneDuration : duration,
@@ -519,7 +533,9 @@ export default function GenerateClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const url = `${window.location.origin}/share/${data.id}`;
+      if (data.id) setProjectId(data.id);
+      const token = typeof data.shareToken === "string" ? data.shareToken : null;
+      const url = token ? `${window.location.origin}/share/${token}` : "";
       setShareUrl(url);
       await navigator.clipboard.writeText(url);
       setCopied(true);

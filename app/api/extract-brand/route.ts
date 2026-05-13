@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth";
 import { extractFromUrl } from "@/lib/brand-extractor";
 import { db } from "@/lib/prisma";
+import { logApiError } from "@/lib/server-log";
 
 export const maxDuration = 60;
 
@@ -25,8 +27,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
     }
 
-    console.log(`[extract-brand] Extracting brand from: ${parsedUrl.href}`);
-
     // Run the extraction pipeline
     const brandData = await extractFromUrl(parsedUrl.href);
 
@@ -46,17 +46,18 @@ export async function POST(req: Request) {
         tone: brandData.tone,
         style: brandData.style,
         images: brandData.images,
+        testimonials: brandData.testimonials as Prisma.InputJsonValue,
+        integrations: brandData.integrations as Prisma.InputJsonValue,
+        pricingCues: brandData.pricingCues as Prisma.InputJsonValue,
         userId: session.user.id,
       },
     });
 
     return NextResponse.json({ id: brandKit.id, ...brandData });
-  } catch (error: any) {
-    console.error("[extract-brand] Error:", error);
-    return NextResponse.json(
-      { error: error.message || "Brand extraction failed" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logApiError("extract-brand", error);
+    const message = error instanceof Error ? error.message : "Brand extraction failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

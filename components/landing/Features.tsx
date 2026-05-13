@@ -1,39 +1,45 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Shield, Cpu, Layout, MessageSquare, Repeat } from "lucide-react";
+import { Globe, Film, Layers, Sparkles, Share2, Wand2 } from "lucide-react";
 
 const features = [
   {
-    icon: <Zap className="w-6 h-6" />,
-    title: "Instant Generation",
-    description: "Go from text prompt to high-quality motion graphics in under 60 seconds."
+    icon: <Globe className="w-6 h-6" />,
+    title: "Brand from your URL",
+    description:
+      "Scrape headline, palette, logos, hero imagery, and copy signals so the video matches your real marketing site.",
   },
   {
-    icon: <Cpu className="w-6 h-6" />,
-    title: "AI Precision",
-    description: "Our advanced neural networks handle timing, easing, and layout automatically."
+    icon: <Film className="w-6 h-6" />,
+    title: "Scene director, not one blob",
+    description:
+      "Multi-scene storyboard (hook → product → proof → CTA) with per-scene motion direction and template picks.",
   },
   {
-    icon: <Layout className="w-6 h-6" />,
-    title: "Template Library",
-    description: "Access hundreds of professionally designed starting points for any niche."
+    icon: <Layers className="w-6 h-6" />,
+    title: "Premium Remotion templates",
+    description:
+      "Kinetic type, bento grids, browser walkthroughs, 3D hero moments, testimonials, integrations, and comparisons — composed, not random JSX.",
   },
   {
-    icon: <MessageSquare className="w-6 h-6" />,
-    title: "Natural Language",
-    description: "Just describe what you want in plain English. No complex keyframes needed."
+    icon: <Wand2 className="w-6 h-6" />,
+    title: "Director + platform presets",
+    description:
+      "Optional style modes and aspect presets (16:9 launch film, 9:16 shorts) so exports match where you publish.",
   },
   {
-    icon: <Repeat className="w-6 h-6" />,
-    title: "Infinite Iterations",
-    description: "Tweak and refine your videos instantly with real-time AI adjustments."
+    icon: <Share2 className="w-6 h-6" />,
+    title: "Share links + WebM export",
+    description:
+      "Opaque share tokens for previews; in-browser WebM capture today, optional worker MP4 when you wire a render webhook.",
   },
   {
-    icon: <Shield className="w-6 h-6" />,
-    title: "Enterprise Grade",
-    description: "High-resolution exports and commercial usage rights included on all plans."
-  }
+    icon: <Sparkles className="w-6 h-6" />,
+    title: "Built for iteration",
+    description:
+      "Regenerate single scenes, tweak copy in the timeline, and re-stitch without starting from zero.",
+  },
 ];
 
 export default function Features() {
@@ -42,12 +48,12 @@ export default function Features() {
       <div className="container px-6 mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-20">
           <h2 className="text-4xl md:text-6xl font-extrabold mb-8 text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400">
-            Everything you need for <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-500">Professional Motion.</span>
+            Built for <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-500">SaaS launches.</span>
           </h2>
           <p className="text-slate-400 text-xl font-medium">
-            Stop spending hours in complex software. Let our AI handle the technical 
-            heavy lifting while you focus on the creative vision.
+            Positioning: homepage explainers, feature tours, and launch films — where website-aware branding actually
+            matters.
           </p>
         </div>
 
@@ -66,12 +72,8 @@ export default function Features() {
                 <div className="w-20 h-20 rounded-[1.5rem] bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-8 shadow-[0_0_20px_rgba(59,130,246,0.2)] group-hover:bg-blue-500 group-hover:text-white transition-all duration-500 z-10">
                   {feature.icon}
                 </div>
-                <h3 className="text-2xl font-black text-white mb-4 z-10">
-                  {feature.title}
-                </h3>
-                <p className="text-slate-400 font-medium leading-relaxed z-10">
-                  {feature.description}
-                </p>
+                <h3 className="text-2xl font-black text-white mb-4 z-10">{feature.title}</h3>
+                <p className="text-slate-400 font-medium leading-relaxed z-10">{feature.description}</p>
               </div>
             </motion.div>
           ))}

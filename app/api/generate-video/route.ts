@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { getServerSession } from "@/lib/auth";
 
 export const maxDuration = 120;
 
@@ -42,6 +43,11 @@ async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { prompt, duration: rawDuration, aspectVideo, brandKit, scene } = await req.json();
 
     const duration = Math.min(Math.max(Number(rawDuration) || 10, 3), 300);
@@ -98,7 +104,7 @@ Generate ONLY this single scene — it will be stitched with others.
 `;
     }
 
-    const useGodTemplates = process.env.USE_GOD_TEMPLATES === "true";
+    const useGodTemplates = process.env.USE_GOD_TEMPLATES !== "false";
     let systemPrompt = "";
 
     if (useGodTemplates) {
@@ -144,6 +150,18 @@ AVAILABLE TEMPLATES:
 9. "LottieOverlay" — Full-frame Lottie motion graphic (when you have valid Lottie JSON).
    Best for: logo sting, icon burst, pre-designed motion from designers.
    Props: { headline (string, optional), animationData (object, REQUIRED — valid Lottie JSON). If you cannot supply JSON, do NOT pick this template. }
+
+10. "IntegrationShowcase" — Staggered row of partner logos with glass pills and continuous horizontal drift.
+   Best for: integrations, partner ecosystem, trust strip.
+   Props: { headline (string), subheadline (string, optional), logos (array of { name: string, imageUrl?: string }, up to 8) }
+
+11. "TestimonialSpotlight" — Large quote typography with author line and soft radial glow.
+   Best for: customer proof, testimonial beat.
+   Props: { headline (string, short attribution e.g. company), subheadline (string, the quote — max ~20 words), imageUrl (string, optional headshot) }
+
+12. "ComparisonSplit" — Two-column contrast (before/after or us vs them) with animated center divider.
+   Best for: problem vs solution, differentiation.
+   Props: { headline (string), subheadline (string), leftLabel (string), rightLabel (string), imageUrl (string, optional hero) }
 
 ${brandBlock}
 ${sceneBlock}

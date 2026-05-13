@@ -25,14 +25,21 @@ const TEMPLATE_NAMES = new Set([
   "ProductOrbit3D",
   "DemoBrowserWalkthrough",
   "LottieOverlay",
+  "IntegrationShowcase",
+  "TestimonialSpotlight",
+  "ComparisonSplit",
 ]);
 
 export type PlanValidationIssue = { code: string; message: string };
 
+const OPENING_TYPES = new Set(["hook", "intro"]);
+const CLOSING_TYPES = new Set(["cta", "outro"]);
+
 export function validateScenePlan(
   plan: ScenePlanShape,
   expectedSceneCount: number,
-  targetDuration: number
+  targetDuration: number,
+  videoType?: string
 ): PlanValidationIssue[] {
   const issues: PlanValidationIssue[] = [];
   if (!plan.scenes || !Array.isArray(plan.scenes)) {
@@ -67,5 +74,34 @@ export function validateScenePlan(
       message: `Scene durations sum to ${sum}s but target is ${targetDuration}s`,
     });
   }
+
+  const first = plan.scenes[0];
+  const last = plan.scenes[plan.scenes.length - 1];
+  if (first?.type && !OPENING_TYPES.has(String(first.type))) {
+    issues.push({
+      code: "NARRATIVE_OPEN",
+      message: `Scene 1 type should be hook or intro for ${videoType || "general"}, got "${first.type}"`,
+    });
+  }
+  if (last?.type && !CLOSING_TYPES.has(String(last.type))) {
+    issues.push({
+      code: "NARRATIVE_CLOSE",
+      message: `Last scene type should be cta or outro, got "${last.type}"`,
+    });
+  }
+
+  for (let i = 2; i < plan.scenes.length; i++) {
+    const a = plan.scenes[i - 2]?.templateName;
+    const b = plan.scenes[i - 1]?.templateName;
+    const c = plan.scenes[i]?.templateName;
+    if (a && a === b && b === c) {
+      issues.push({
+        code: "TEMPLATE_STREAK",
+        message: `Template "${a}" used three times in a row — vary templates`,
+      });
+      break;
+    }
+  }
+
   return issues;
 }

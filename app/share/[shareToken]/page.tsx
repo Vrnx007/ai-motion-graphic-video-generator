@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { VideoPreview, type VideoPreviewHandle } from "@/components/VideoPreview";
-import { Play, Sparkles, ArrowLeft, Download, Loader2 } from "lucide-react";
+import { Play, ArrowLeft, Download, Loader2 } from "lucide-react";
 import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import { resolveBackgroundTrack } from "@/lib/music-tracks";
+import { injectShareTokenInVideoCode } from "@/lib/share-code";
 
 export default function SharePage() {
-  const { id } = useParams();
-  const [project, setProject] = useState<any>(null);
+  const params = useParams();
+  const shareToken = typeof params?.shareToken === "string" ? params.shareToken : "";
+  const [project, setProject] = useState<{
+    id: string;
+    shareToken: string;
+    videoCode: string;
+    aspectRatio?: string;
+    musicMood?: string | null;
+    scenes?: unknown;
+    duration?: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -19,22 +29,28 @@ export default function SharePage() {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const res = await fetch(`/api/get-project?id=${id}`);
+        const res = await fetch(
+          `/api/get-project?shareToken=${encodeURIComponent(shareToken)}`
+        );
         const data = await res.json();
         if (!res.ok || data?.error || !data?.videoCode) {
           setProject(null);
         } else {
           setProject(data);
         }
-      } catch (e) {
-        console.error("Failed to load project");
+      } catch {
         setProject(null);
       } finally {
         setLoading(false);
       }
     };
-    if (id) fetchProject();
-  }, [id]);
+    if (shareToken) fetchProject();
+  }, [shareToken]);
+
+  const codeWithShare = useMemo(() => {
+    if (!project?.videoCode || !project.shareToken) return "";
+    return injectShareTokenInVideoCode(project.videoCode, project.shareToken);
+  }, [project]);
 
   const handleDownload = async () => {
     if (!project) return;
@@ -57,41 +73,60 @@ export default function SharePage() {
       document.body.removeChild(a);
       setTimeout(() => window.URL.revokeObjectURL(url), 2000);
       setDownloadProgress(100);
-    } catch (error: any) {
-      console.error(error);
-      alert(`Download failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Download failed: ${message}`);
     } finally {
       setRecording(false);
       setTimeout(() => setDownloadProgress(0), 2000);
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white">Loading Video...</div>;
-  if (!project) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white">Project not found.</div>;
+  if (loading)
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white">
+        Loading Video...
+      </div>
+    );
+  if (!project)
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white">
+        Project not found.
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-[#0f172a] p-4 md:p-8 flex flex-col items-center justify-center relative">
       <Link
-        href="/dashboard/archives"
+        href="/"
         className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
       >
         <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-        <span className="font-medium">Back to Archive</span>
+        <span className="font-medium">Home</span>
       </Link>
 
       <div className="mb-8 flex items-center gap-3">
         <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
           <Play className="text-white w-5 h-5 fill-current" />
         </div>
-        <h1 className="text-2xl font-black italic tracking-tighter text-white">Motion<span className="text-blue-500">AI</span></h1>
+        <h1 className="text-2xl font-black italic tracking-tighter text-white">
+          Motion<span className="text-blue-500">AI</span>
+        </h1>
       </div>
 
-      <div className={`w-full max-w-5xl bg-black rounded-[40px] shadow-2xl overflow-hidden ring-8 ring-white/5 border border-white/10 relative group ${project.aspectRatio === "9:16" ? "aspect-[9/16] h-[70vh] mx-auto" : project.aspectRatio === "1:1" ? "aspect-square" : "aspect-video"
-        }`}>
+      <div
+        className={`w-full max-w-5xl bg-black rounded-[40px] shadow-2xl overflow-hidden ring-8 ring-white/5 border border-white/10 relative group ${
+          project.aspectRatio === "9:16"
+            ? "aspect-[9/16] h-[70vh] mx-auto"
+            : project.aspectRatio === "1:1"
+              ? "aspect-square"
+              : "aspect-video"
+        }`}
+      >
         <div className="absolute -inset-4 bg-blue-600/20 blur-3xl opacity-50 pointer-events-none" />
         <VideoPreview
           ref={previewRef}
-          code={project.videoCode}
+          code={codeWithShare}
           duration={projectDurationSeconds(project)}
           aspectRatio={project.aspectRatio}
           variant="clean"
@@ -125,10 +160,10 @@ export default function SharePage() {
         )}
 
         <Link
-          href={`/dashboard/generate?resume=${project.id}`}
+          href={`/signin?next=${encodeURIComponent(`/dashboard/generate?resume=${project.id}`)}`}
           className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold uppercase tracking-widest"
         >
-          Open in studio
+          Open in studio (sign in)
         </Link>
       </div>
     </div>

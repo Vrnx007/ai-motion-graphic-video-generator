@@ -193,7 +193,7 @@ export default function ArchivesClient() {
                     <Link href={`/dashboard/generate?resume=${anim.id}`} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600/15 hover:bg-emerald-600/25 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-colors text-emerald-400 border border-emerald-500/30">
                       Edit
                     </Link>
-                    <Link href={`/share/${anim.id}`} className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-colors text-white border border-white/5">
+                    <Link href={`/share/${anim.shareToken}`} className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold text-[10px] tracking-widest uppercase transition-colors text-white border border-white/5">
                       <Eye size={14} /> View
                     </Link>
                     <button

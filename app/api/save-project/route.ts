@@ -1,6 +1,7 @@
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession();
@@ -9,6 +10,7 @@ export async function POST(req: Request) {
     }
 
     const {
+      projectId,
       videoCode,
       prompt,
       duration,
@@ -22,42 +24,57 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing video code or prompt" }, { status: 400 });
     }
 
-    console.log("[SAVE] Received save request for user:", session.user.id);
-    console.log("[SAVE] Prompt:", prompt);
-    console.log("[SAVE] Aspect Ratio:", aspectRatio);
     const validatedDuration = Math.round(Math.min(Math.max(Number(duration) || 10, 5), 300));
 
     const scenesJson =
       scenesPayload !== undefined && scenesPayload !== null
-        ? (Array.isArray(scenesPayload) ? scenesPayload : scenesPayload)
+        ? Array.isArray(scenesPayload)
+          ? scenesPayload
+          : scenesPayload
         : undefined;
+
+    const data = {
+      videoCode,
+      prompt,
+      duration: validatedDuration,
+      aspectRatio: aspectRatio || "16:9",
+      scenes:
+        scenesJson === undefined ? undefined : (JSON.parse(JSON.stringify(scenesJson)) as object),
+      videoType:
+        typeof videoTypePayload === "string" && videoTypePayload.length > 0
+          ? videoTypePayload.slice(0, 64)
+          : "general",
+      musicMood:
+        typeof musicMoodPayload === "string" && musicMoodPayload.length > 0
+          ? musicMoodPayload.slice(0, 120)
+          : null,
+    };
+
+    if (typeof projectId === "string" && projectId.length > 0) {
+      const existing = await db.project.findFirst({
+        where: { id: projectId, userId: session.user.id },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+      const project = await db.project.update({
+        where: { id: projectId },
+        data,
+      });
+      return NextResponse.json({ id: project.id, shareToken: project.shareToken });
+    }
 
     const project = await db.project.create({
       data: {
-        videoCode,
-        prompt,
-        duration: validatedDuration,
-        aspectRatio: aspectRatio || "16:9",
+        ...data,
         userId: session.user.id,
-        scenes:
-          scenesJson === undefined
-            ? undefined
-            : (JSON.parse(JSON.stringify(scenesJson)) as object),
-        videoType:
-          typeof videoTypePayload === "string" && videoTypePayload.length > 0
-            ? videoTypePayload.slice(0, 64)
-            : "general",
-        musicMood:
-          typeof musicMoodPayload === "string" && musicMoodPayload.length > 0
-            ? musicMoodPayload.slice(0, 120)
-            : null,
       },
     });
 
-    return NextResponse.json({ id: project.id });
-  } catch (error: any) {
-    console.error("Database Save Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ id: project.id, shareToken: project.shareToken });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -68,15 +85,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log("[ARCHIVE] Fetching projects for user:", session.user.id);
-
     const projects = await db.project.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json(projects);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
   }
 }
@@ -95,7 +110,6 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "ID is required" }, { status: 400 });
     }
 
-    // Verify the project belongs to the user
     const project = await db.project.findUnique({
       where: { id },
     });
@@ -108,14 +122,12 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Delete the project
     await db.project.delete({
       where: { id },
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Delete error:", error);
+  } catch {
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
 }

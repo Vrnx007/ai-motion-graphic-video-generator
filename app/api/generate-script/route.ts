@@ -92,6 +92,9 @@ BRAND CONTEXT:
   Preferred Aesthetic: ${brandKit.aesthetic || "AUTO - Derive from brand colors/industry"}
   CTA Text: ${brandKit.cta || "Get Started"}
   Features: ${JSON.stringify(brandKit.features || [])}
+  Testimonials (use for dedicated social-proof scene when non-empty): ${JSON.stringify(brandKit.testimonials || [])}
+  Integrations / partners (use TestimonialSpotlight or IntegrationShowcase templates when relevant): ${JSON.stringify(brandKit.integrations || [])}
+  Pricing cues (short on-screen numbers only, do not invent prices): ${JSON.stringify(brandKit.pricingCues || [])}
   Logo URL: ${brandKit.logoUrl || "N/A"}
   Available Images from website (USER-CURATED — use ONLY these URLs, do not invent or substitute):
 ${images.length ? images.map((img: { url: string; alt?: string; context?: string }, i: number) => `    Image ${i + 1}: ${img.url} (${img.alt || img.context || "asset"})`).join("\n") : "    (none — prefer typography / abstract scenes)"}
@@ -147,6 +150,13 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       '- "general": Hook → Main Content ×2-3 → Supporting Points ×2-3 → Visual Break → CTA',
       "",
       `VIDEO TYPE: ${videoType || "general"}`,
+      "",
+      "NARRATIVE ARC (mandatory ordering by scene index):",
+      "- Scene 1 MUST be a hook or intro (attention).",
+      "- Middle scenes MUST progress: problem/context → product/solution → benefits/features → demo or proof.",
+      "- The FINAL scene MUST be cta or outro with a clear call-to-action line in `text`.",
+      "- If brandKit.testimonials is non-empty, allocate EXACTLY one scene with type social-proof and templateName TestimonialSpotlight.",
+      "- If brandKit.integrations is non-empty, allocate at least one scene using templateName IntegrationShowcase or ComparisonSplit.",
       "",
 
       // ═══ VISUAL DIRECTION FOR EACH SCENE ═══
@@ -221,6 +231,9 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       '"SplitScreen" — Left text / right image with slide-in. Best for: problem, solution.',
       '"StatCounter" — Animated number counters. Best for: social-proof, metrics.',
       '"LogoReveal" — Cinematic logo entrance. Best for: intro, outro, CTA.',
+      '"IntegrationShowcase" — Horizontal partner / integration logos with staggered motion. Best for: proof, ecosystem, trust strip.',
+      '"TestimonialSpotlight" — Quote card with author, subtle parallax, glow frame. Best for: social-proof, testimonial.',
+      '"ComparisonSplit" — Before/after or us-vs-them split with kinetic divider. Best for: problem, differentiation.',
       "",
 
       // ═══ RULES ═══
@@ -308,7 +321,7 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
 
     normalizeDurations(scenePlan);
 
-    let issues = validateScenePlan(scenePlan, sceneCount, targetDuration);
+    let issues = validateScenePlan(scenePlan, sceneCount, targetDuration, videoType || "general");
     if (issues.length > 0) {
       console.warn("[generate-script] Plan validation issues, running repair pass:", issues);
       const repairPrompt = [
@@ -333,7 +346,7 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
         throw new Error("Repair pass returned invalid scene plan");
       }
       normalizeDurations(scenePlan);
-      issues = validateScenePlan(scenePlan, sceneCount, targetDuration);
+      issues = validateScenePlan(scenePlan, sceneCount, targetDuration, videoType || "general");
       if (issues.length > 0) {
         console.warn("[generate-script] Repair pass still has issues (returning best effort):", issues);
       }

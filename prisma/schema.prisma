@@ -74,6 +74,8 @@ model Verification {
 
 model Project {
   id          String    @id @default(cuid())
+  /** Opaque token for public share URLs (never use raw project id in public links). */
+  shareToken  String    @unique @default(cuid())
   prompt      String    @default("Untitled Animation")
   videoCode   String
   duration    Int       @default(10)
@@ -114,6 +116,10 @@ model BrandKit {
 
   // Images from site
   images        Json?    // [{ url, alt, context }]
+
+  testimonials  Json?    // [{ quote, author, role }]
+  integrations  Json?    // [{ name, logoUrl }]
+  pricingCues     Json?    // string[] or { label, detail }[]
 
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
