@@ -2,20 +2,26 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 export const SESSION_COOKIE = "motion_ai_session";
 
-/** Minimum length for cookie signing secret */
-const MIN_SECRET_LEN = 16;
+/**
+ * Used when SESSION_SECRET is unset so login still works out of the box.
+ * Set SESSION_SECRET in production for a unique signing key.
+ */
+const DEFAULT_SESSION_SECRET =
+  "motion-ai-built-in-session-key-change-in-env-if-you-want-0123456789abcdef";
 
-function getSecret(): string | null {
+function resolveSecret(): string {
   const s = process.env.SESSION_SECRET?.trim();
-  if (!s || s.length < MIN_SECRET_LEN) return null;
-  return s;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    console.warn(
+      "[session] SESSION_SECRET is not set — using built-in default. Set SESSION_SECRET in production for stronger cookie signing."
+    );
+  }
+  return DEFAULT_SESSION_SECRET;
 }
 
 export function signSessionToken(userId: string): string {
-  const secret = getSecret();
-  if (!secret) {
-    throw new Error("SESSION_SECRET must be set (at least 16 characters)");
-  }
+  const secret = resolveSecret();
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
   const payload = Buffer.from(JSON.stringify({ userId, exp }), "utf8").toString("base64url");
   const sig = createHmac("sha256", secret).update(payload).digest("base64url");
@@ -23,8 +29,7 @@ export function signSessionToken(userId: string): string {
 }
 
 export function verifySessionToken(token: string): { userId: string } | null {
-  const secret = getSecret();
-  if (!secret) return null;
+  const secret = resolveSecret();
   const dot = token.lastIndexOf(".");
   if (dot === -1) return null;
   const payload = token.slice(0, dot);

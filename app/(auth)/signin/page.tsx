@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Play, Sparkles, Lock, Mail, ArrowRight } from "lucide-react";
+import { parseApiJson } from "@/lib/parse-api-response";
 
 function safeNextPath(next: string | null): string {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return "/dashboard";
@@ -22,9 +23,13 @@ function SignInForm() {
   useEffect(() => {
     setMounted(true);
     const checkSession = async () => {
-      const res = await fetch("/api/auth/session");
-      const data = await res.json();
-      if (data?.user) router.push(safeNextPath(nextPath));
+      try {
+        const res = await fetch("/api/auth/session");
+        const data = await parseApiJson<{ user?: unknown }>(res);
+        if (data?.user) router.push(safeNextPath(nextPath));
+      } catch {
+        /* not signed in or non-JSON — stay on page */
+      }
     };
     checkSession();
   }, [router, nextPath]);
@@ -39,10 +44,17 @@ function SignInForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json().catch(() => ({}));
+    let data: Record<string, unknown> = {};
+    try {
+      data = await parseApiJson(res);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Sign in failed");
+      setIsLoading(false);
+      return;
+    }
 
     if (!res.ok) {
-      setError(typeof data?.error === "string" ? data.error : "Invalid email or password");
+      setError(typeof data.error === "string" ? data.error : "Invalid email or password");
       setIsLoading(false);
       return;
     }
@@ -130,11 +142,7 @@ function SignInForm() {
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-sm text-slate-500 font-medium">
-              Credentials are set in <code className="text-slate-400">APP_LOGIN_EMAIL</code> and{" "}
-              <code className="text-slate-400">APP_LOGIN_PASSWORD</code>. Optional{" "}
-              <code className="text-slate-400">APP_LOGIN_PASSWORD_HASH</code> (argon2id) replaces the plain password.
-            </p>
+            <p className="text-sm text-slate-500 font-medium">Email and password must match your server configuration.</p>
           </div>
         </div>
 

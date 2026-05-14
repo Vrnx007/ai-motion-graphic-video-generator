@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { parseApiJson } from "@/lib/parse-api-response";
 
 type SessionUser = { id: string; email: string; name: string; image?: string | null };
 
@@ -23,10 +24,15 @@ export default function LandingNavbar() {
   const [session, setSession] = useState<SessionUser | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/session")
-      .then((r) => r.json())
-      .then((d: { user?: SessionUser | null }) => setSession(d.user ?? null))
-      .catch(() => setSession(null));
+    (async () => {
+      try {
+        const r = await fetch("/api/auth/session");
+        const d = await parseApiJson<{ user?: SessionUser | null }>(r);
+        setSession(d.user ?? null);
+      } catch {
+        setSession(null);
+      }
+    })();
   }, []);
 
   const handleSignOut = async () => {

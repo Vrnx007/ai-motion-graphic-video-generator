@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
     "@remotion/three",
     "remotion",
     "esbuild",
-    "argon2",
     "playwright",
     "bullmq",
     "ioredis",

@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import argon2 from "argon2";
 import { db } from "@/lib/prisma";
 import { signSessionToken, SESSION_COOKIE, timingSafeStringEqual } from "@/lib/session";
 
 export async function POST(req: Request) {
   try {
     const emailEnv = process.env.APP_LOGIN_EMAIL?.trim().toLowerCase();
-    const passwordHashEnv = process.env.APP_LOGIN_PASSWORD_HASH?.trim();
-    const passwordPlainEnv = process.env.APP_LOGIN_PASSWORD ?? "";
+    const passwordEnv = process.env.APP_LOGIN_PASSWORD ?? "";
 
     if (!emailEnv) {
       return NextResponse.json(
@@ -17,11 +15,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!passwordHashEnv && !passwordPlainEnv) {
+    if (!passwordEnv) {
       return NextResponse.json(
-        {
-          error: "Set APP_LOGIN_PASSWORD (or APP_LOGIN_PASSWORD_HASH with argon2id for stricter setups).",
-        },
+        { error: "Set APP_LOGIN_PASSWORD in your environment." },
         { status: 500 }
       );
     }
@@ -34,18 +30,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    let passwordOk = false;
-    if (passwordHashEnv) {
-      try {
-        passwordOk = await argon2.verify(passwordHashEnv, password);
-      } catch {
-        passwordOk = false;
-      }
-    } else {
-      passwordOk = timingSafeStringEqual(password, passwordPlainEnv);
-    }
-
-    if (!passwordOk) {
+    if (!timingSafeStringEqual(password, passwordEnv)) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 

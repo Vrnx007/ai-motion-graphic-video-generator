@@ -7,6 +7,7 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { VideoPreview, type VideoPreviewHandle } from "@/components/VideoPreview";
 import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import { resolveBackgroundTrack } from "@/lib/music-tracks";
+import { parseApiJson } from "@/lib/parse-api-response";
 
 
 const containerVariants: Variants = {
@@ -80,7 +81,7 @@ export default function ArchivesClient() {
     try {
       const response = await fetch("/api/save-project");
       if (!response.ok) throw new Error("Failed to fetch");
-      const data = await response.json();
+      const data = await parseApiJson(response);
       setAnimations(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Archive Fetch Error:", error);

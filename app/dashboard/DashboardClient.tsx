@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Video, History, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
+import { parseApiJson } from "@/lib/parse-api-response";
 
 const TiltCard = ({ children, disabled = false, href }: { children: React.ReactNode, disabled?: boolean, href: string }) => {
   const x = useMotionValue(0);
@@ -64,7 +65,7 @@ export default function DashboardClient() {
     try {
       const response = await fetch("/api/save-project");
       if (!response.ok) throw new Error("Failed to fetch");
-      const data = await response.json();
+      const data = await parseApiJson(response);
       setAnimationsCount(Array.isArray(data) ? data.length : 0);
     } catch (error) {
       console.error("Archive Fetch Error:", error);

@@ -8,20 +8,23 @@ import { Play, ArrowLeft, Download, Loader2 } from "lucide-react";
 import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import { resolveBackgroundTrack } from "@/lib/music-tracks";
 import { injectShareTokenInVideoCode } from "@/lib/share-code";
+import { parseApiJson } from "@/lib/parse-api-response";
+
+type ShareProject = {
+  id: string;
+  shareToken: string;
+  videoCode: string;
+  aspectRatio?: string;
+  musicMood?: string | null;
+  scenes?: unknown;
+  duration?: number;
+};
 
 export default function SharePage() {
   const params = useParams();
   const shareToken = typeof params?.shareToken === "string" ? params.shareToken : "";
   const [clientTitle, setClientTitle] = useState("Motion.AI");
-  const [project, setProject] = useState<{
-    id: string;
-    shareToken: string;
-    videoCode: string;
-    aspectRatio?: string;
-    musicMood?: string | null;
-    scenes?: unknown;
-    duration?: number;
-  } | null>(null);
+  const [project, setProject] = useState<ShareProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -40,11 +43,12 @@ export default function SharePage() {
         const res = await fetch(
           `/api/get-project?shareToken=${encodeURIComponent(shareToken)}`
         );
-        const data = await res.json();
-        if (!res.ok || data?.error || !data?.videoCode) {
+        const data = await parseApiJson(res);
+        const err = typeof data.error === "string" ? data.error : null;
+        if (!res.ok || err || typeof data.videoCode !== "string") {
           setProject(null);
         } else {
-          setProject(data);
+          setProject(data as ShareProject);
         }
       } catch {
         setProject(null);
@@ -73,8 +77,10 @@ export default function SharePage() {
           requestedBy: "client@share",
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
+      const data = await parseApiJson(res);
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Failed");
+      }
       setRevisionStatus("Revision requested. Our team will respond shortly.");
       setRevisionNotes("");
     } catch (e: unknown) {

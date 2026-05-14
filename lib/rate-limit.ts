@@ -94,16 +94,21 @@ export async function rateLimitHitAsync(
   limit: number,
   windowMs: number
 ): Promise<{ allowed: true } | { allowed: false; retryAfterSec: number }> {
-  const sliding = getSlidingRatelimit(limit, windowMs);
-  if (!sliding) {
+  try {
+    const sliding = getSlidingRatelimit(limit, windowMs);
+    if (!sliding) {
+      return rateLimitHit(key, limit, windowMs);
+    }
+    const res = await sliding.limit(key);
+    if (!res.success) {
+      const retryAfterSec = Math.max(1, Math.ceil((res.reset - Date.now()) / 1000));
+      return { allowed: false, retryAfterSec };
+    }
+    return { allowed: true };
+  } catch (e) {
+    console.error("[rate-limit] Upstash/limit failed, using in-memory fallback:", e);
     return rateLimitHit(key, limit, windowMs);
   }
-  const res = await sliding.limit(key);
-  if (!res.success) {
-    const retryAfterSec = Math.max(1, Math.ceil((res.reset - Date.now()) / 1000));
-    return { allowed: false, retryAfterSec };
-  }
-  return { allowed: true };
 }
 
 export function clientIpFromRequest(req: Request): string {

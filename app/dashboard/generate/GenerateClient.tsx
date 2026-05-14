@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { parseApiJson } from "@/lib/parse-api-response";
 
 function fallbackSceneJson(label: string): string {
   return JSON.stringify({
@@ -169,16 +170,16 @@ export default function GenerateClient() {
     (async () => {
       try {
         const res = await fetch(`/api/get-project?id=${encodeURIComponent(rid)}`);
-        const p = await res.json();
-        if (!p?.videoCode || p.error) return;
+        const p = (await parseApiJson(res)) as Record<string, unknown>;
+        if (typeof p.videoCode !== "string" || p.error) return;
         setVideoCode(p.videoCode);
         setProjectId(typeof p.id === "string" ? p.id : null);
         if (typeof p.shareToken === "string") {
           setShareUrl(`${window.location.origin}/share/${p.shareToken}`);
         }
-        setPrompt(p.prompt || "");
+        setPrompt(typeof p.prompt === "string" ? p.prompt : "");
         setDuration(Math.max(5, Math.min(300, Number(p.duration) || 10)));
-        setAspectRatio(p.aspectRatio || "16:9");
+        setAspectRatio(typeof p.aspectRatio === "string" ? p.aspectRatio : "16:9");
         setVideoType(typeof p.videoType === "string" ? p.videoType : "general");
         if (Array.isArray(p.scenes) && p.scenes.length > 0) setScenes(p.scenes);
         else setScenes([]);
@@ -211,14 +212,15 @@ export default function GenerateClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ images: imageData, brandKitId: brandKit?.id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setUploadedImages(prev => [...prev, ...data.images]);
+      const data = (await parseApiJson(res)) as { error?: string; images?: unknown };
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      const newImages = Array.isArray(data.images) ? data.images : [];
+      setUploadedImages((prev) => [...prev, ...newImages]);
       // Also add to brandKit images if it exists
       if (brandKit) {
         setBrandKit((prev: any) => ({
           ...prev,
-          images: [...(prev?.images || []), ...data.images],
+          images: [...(prev?.images || []), ...newImages],
         }));
       }
     } catch (err: any) {
@@ -238,9 +240,9 @@ export default function GenerateClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, variationType: type, count: 5, brandKit }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setVariations(data.variations || []);
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      setVariations(Array.isArray(data.variations) ? data.variations : []);
     } catch (err: any) {
       alert(`Variations failed: ${err.message}`);
     } finally {
@@ -276,8 +278,8 @@ export default function GenerateClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: websiteUrl }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
       setBrandKit(data);
       if (data.headline && !prompt) {
         setPrompt(`Create a ${videoType} video for ${data.headline}`);
@@ -300,9 +302,12 @@ export default function GenerateClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration: requestedDuration, brandKit }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const nextScenes = rescaleScenesToTargetSeconds(data.scenes || [], requestedDuration);
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      const nextScenes = rescaleScenesToTargetSeconds(
+        (Array.isArray(data.scenes) ? data.scenes : []) as Scene[],
+        requestedDuration
+      );
       setScenes(nextScenes);
       setMusicMood(typeof data.musicMood === "string" ? data.musicMood : null);
       setSceneCodes([]);
@@ -345,10 +350,10 @@ export default function GenerateClient() {
             scene,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        const data = (await parseApiJson(res)) as Record<string, unknown>;
+        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
         
-        const safeCode = cleanAiCode(data.videoCode);
+        const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
 
         const isValid = isValidGodTemplateJsonString(safeCode);
 
@@ -400,9 +405,16 @@ export default function GenerateClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration, brandKit }),
         });
-        const scriptData = await scriptRes.json();
-        if (!scriptRes.ok) throw new Error(scriptData.error);
-        const autoScenes = rescaleScenesToTargetSeconds(scriptData.scenes || [], duration);
+        const scriptData = await parseApiJson(scriptRes);
+        if (!scriptRes.ok) {
+          throw new Error(
+            typeof scriptData.error === "string" ? scriptData.error : "Script generation failed"
+          );
+        }
+        const autoScenes = rescaleScenesToTargetSeconds(
+          (Array.isArray(scriptData.scenes) ? scriptData.scenes : []) as Scene[],
+          duration
+        );
         setScenes(autoScenes);
         setMusicMood(typeof scriptData.musicMood === "string" ? scriptData.musicMood : null);
 
@@ -422,10 +434,10 @@ export default function GenerateClient() {
               scene,
             }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+          const data = (await parseApiJson(res)) as Record<string, unknown>;
+          if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
           
-          const safeCode = cleanAiCode(data.videoCode);
+          const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
           const isValid = isValidGodTemplateJsonString(safeCode);
           if (!isValid) {
             console.warn(`Quick generate scene ${scene.id} truncated, using fallback`);
@@ -455,20 +467,25 @@ export default function GenerateClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: getEnhancedPrompt(), duration, aspectVideo: aspectRatio, brandKit }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        const data = (await parseApiJson(res)) as Record<string, unknown>;
+        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
         
-        const safeCode = cleanAiCode(data.videoCode);
+        const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
 
         const isValid = isValidGodTemplateJsonString(safeCode);
 
         if (!isValid) throw new Error("The AI generated incomplete code due to length limits. Please try again or use a longer duration to enable scene-based generation.");
         
         setVideoCode(safeCode);
-        if (data.duration) setDuration(data.duration);
+        const apiDurRaw = Number(data.duration);
+        const apiDur =
+          Number.isFinite(apiDurRaw) && apiDurRaw > 0
+            ? Math.max(5, Math.min(300, Math.round(apiDurRaw)))
+            : null;
+        if (apiDur !== null) setDuration(apiDur);
         setSceneCodes([]);
         setStep("preview");
-        autoSaveProject(safeCode, data.duration || duration, undefined, { musicMood: musicMood ?? undefined });
+        autoSaveProject(safeCode, apiDur ?? duration, undefined, { musicMood: musicMood ?? undefined });
       }
     } catch (err: any) {
       alert(`Generation failed: ${err.message}`);
@@ -495,8 +512,8 @@ export default function GenerateClient() {
           musicMood: extra?.musicMood ?? musicMood ?? undefined,
         }),
       });
-      const data = await res.json();
-      if (res.ok && data.id) {
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (res.ok && typeof data.id === "string") {
         setProjectId(data.id);
         if (typeof data.shareToken === "string") {
           setShareUrl(`${window.location.origin}/share/${data.shareToken}`);
@@ -526,9 +543,9 @@ export default function GenerateClient() {
           musicMood: musicMood ?? undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      if (data.id) setProjectId(data.id);
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      if (typeof data.id === "string") setProjectId(data.id);
       const token = typeof data.shareToken === "string" ? data.shareToken : null;
       const url = token ? `${window.location.origin}/share/${token}` : "";
       setShareUrl(url);
@@ -706,9 +723,9 @@ export default function GenerateClient() {
           scene,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const safeCode = cleanAiCode(data.videoCode);
+      const data = (await parseApiJson(res)) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
       const isValid = isValidGodTemplateJsonString(safeCode);
       if (!isValid) throw new Error("Invalid AI output");
       const nc = sceneCodes.map((c) =>

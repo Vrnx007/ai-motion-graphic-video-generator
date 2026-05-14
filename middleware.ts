@@ -41,25 +41,30 @@ function applySecurityHeaders(res: NextResponse) {
 }
 
 export async function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-  const cfg = ROUTE_LIMITS[path];
-  if (cfg) {
-    const reqLike = new Request(request.url, { headers: request.headers });
-    const ip = clientIpFromRequest(reqLike);
-    const hit = await rateLimitHitAsync(`${path}:${ip}`, cfg.limit, cfg.windowMs);
-    if (!hit.allowed) {
-      return applySecurityHeaders(
-        NextResponse.json(
-          { error: "Too many requests" },
-          {
-            status: 429,
-            headers: { "Retry-After": String(hit.retryAfterSec) },
-          }
-        )
-      );
+  try {
+    const path = request.nextUrl.pathname;
+    const cfg = ROUTE_LIMITS[path];
+    if (cfg) {
+      const reqLike = new Request(request.url, { headers: request.headers });
+      const ip = clientIpFromRequest(reqLike);
+      const hit = await rateLimitHitAsync(`${path}:${ip}`, cfg.limit, cfg.windowMs);
+      if (!hit.allowed) {
+        return applySecurityHeaders(
+          NextResponse.json(
+            { error: "Too many requests" },
+            {
+              status: 429,
+              headers: { "Retry-After": String(hit.retryAfterSec) },
+            }
+          )
+        );
+      }
     }
+    return applySecurityHeaders(NextResponse.next());
+  } catch (e) {
+    console.error("[middleware] Unhandled error, passing request through:", e);
+    return NextResponse.next();
   }
-  return applySecurityHeaders(NextResponse.next());
 }
 
 export const config = {
