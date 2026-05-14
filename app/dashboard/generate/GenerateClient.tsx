@@ -12,9 +12,8 @@ import { resolveBackgroundTrack } from "@/lib/music-tracks";
 import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import {
   Loader2, Wand2, Share2, Check, Download, LayoutDashboard, X,
-  Globe, Sparkles, Film, Megaphone, Monitor, Presentation, Play,
-  Upload, Image, Palette, Copy, Zap, Crown, Rocket, Minimize2,
-  Flame, Laptop, Target, Shuffle, Layout, Mic, User,
+  Globe, Film, Megaphone, Monitor, Presentation,
+  Upload, Image, Zap, Crown, Rocket, Mic, User,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -37,16 +36,12 @@ const VIDEO_TYPES = [
   { id: "website-hero", label: "Hero", icon: Monitor },
   { id: "ad-creative", label: "Ad", icon: Megaphone },
   { id: "social-teaser", label: "Social", icon: Film },
-  { id: "general", label: "General", icon: Play },
 ];
 
 const DIRECTOR_STYLES = [
   { id: "premium", label: "Premium", icon: Crown, prompt: "Apple-like premium minimal design, clean typography, lots of whitespace, elegant transitions" },
-  { id: "startup", label: "Startup", icon: Rocket, prompt: "Fast-paced startup energy, bold gradients, dynamic text animations, modern SaaS feel" },
-  { id: "minimal", label: "Minimal", icon: Minimize2, prompt: "Ultra minimal and clean, subtle animations, thin fonts, monochrome with one accent" },
-  { id: "energetic", label: "Energetic", icon: Zap, prompt: "High energy, fast cuts, bold colors, explosive transitions, glitch effects" },
   { id: "cinematic", label: "Cinematic", icon: Film, prompt: "Cinematic film style, letterbox bars, slow Ken Burns, dramatic lighting, vignette" },
-  { id: "playful", label: "Playful", icon: Sparkles, prompt: "Fun and playful, bouncy animations, bright colors, rounded shapes, cartoon-like" },
+  { id: "energetic", label: "Energetic", icon: Zap, prompt: "High energy, fast cuts, bold colors, explosive transitions, glitch effects" },
 ];
 
 const GOD_TEMPLATE_IDS = [
@@ -67,17 +62,6 @@ const GOD_TEMPLATE_IDS = [
   "ParticleStorm",
   "MorphHeadline",
 ] as const;
-
-const PLATFORM_PRESETS = [
-  { id: "youtube", label: "YouTube", aspect: "16:9", duration: 30 },
-  { id: "tiktok", label: "TikTok", aspect: "9:16", duration: 15 },
-  { id: "reels", label: "Reels", aspect: "9:16", duration: 15 },
-  { id: "linkedin", label: "LinkedIn", aspect: "16:9", duration: 30 },
-  { id: "twitter", label: "X / Twitter", aspect: "16:9", duration: 15 },
-  { id: "instagram", label: "IG Post", aspect: "1:1", duration: 15 },
-  { id: "shorts", label: "YT Shorts", aspect: "9:16", duration: 30 },
-  { id: "website", label: "Website", aspect: "16:9", duration: 60 },
-];
 
 /** Force scene durations to sum to targetSeconds (slider is source of truth). */
 function rescaleScenesToTargetSeconds(scenes: Scene[], targetSeconds: number): Scene[] {
@@ -152,13 +136,10 @@ export default function GenerateClient() {
   const [showDownloadSuccess, setShowDownloadSuccess] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
-  // NEW: Director mode, uploads, variations, platform
+  // Style preset + uploaded reference assets
   const [directorStyle, setDirectorStyle] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<Array<{url: string; alt: string; context: string}>>([]);
   const [uploading, setUploading] = useState(false);
-  const [variations, setVariations] = useState<any[]>([]);
-  const [generatingVariations, setGeneratingVariations] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<VideoPreviewHandle | null>(null);
   /** Persisted project id for update saves and resume. */
@@ -270,35 +251,6 @@ export default function GenerateClient() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  // ── Generate Variations ──
-  const handleGenerateVariations = async (type: string) => {
-    setGeneratingVariations(true);
-    try {
-      const res = await fetch("/api/generate-variations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, variationType: type, count: 5, brandKit }),
-      });
-      const data = (await parseApiJson(res)) as Record<string, unknown>;
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
-      setVariations(Array.isArray(data.variations) ? data.variations : []);
-    } catch (err: any) {
-      alert(`Variations failed: ${err.message}`);
-    } finally {
-      setGeneratingVariations(false);
-    }
-  };
-
-  // ── Apply Platform Preset ──
-  const applyPlatformPreset = (presetId: string) => {
-    const preset = PLATFORM_PRESETS.find(p => p.id === presetId);
-    if (preset) {
-      setAspectRatio(preset.aspect);
-      // Do not change duration — presets used to force "Website" to 10s and overwrote long videos.
-      setSelectedPlatform(presetId);
     }
   };
 
@@ -492,133 +444,6 @@ export default function GenerateClient() {
     });
     setVideoCode(stitched);
     autoSaveProject(stitched, scenes.reduce((s, sc) => s + sc.duration, 0), scenes, { musicMood: musicMood ?? undefined });
-  };
-
-  // ── Quick Generate (handles long videos by auto-scripting) ──
-  const handleQuickGenerate = async () => {
-    setLoading(true);
-    setVideoCode("");
-    try {
-      const cleanAiCode = (raw: string) => {
-        return raw
-          .replace(/^```(?:jsx?|tsx?|javascript|typescript|json)?\s*\n?/gim, "")
-          .replace(/\n?```\s*$/gim, "")
-          .replace(/^(Here is the code:|This is the code:|Certainly!|Sure, here is).*$/gim, "")
-          .trim();
-      };
-
-      // If duration is long, we MUST use scene-based generation to avoid AI truncation
-      if (duration > 20) {
-        console.log("Long duration detected. Using auto-scripting workflow...");
-        
-        // 1. Generate Script
-        const scriptRes = await fetch("/api/generate-script", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: getEnhancedPrompt(), videoType, duration, brandKit }),
-        });
-        const scriptData = await parseApiJson(scriptRes);
-        if (!scriptRes.ok) {
-          throw new Error(
-            typeof scriptData.error === "string" ? scriptData.error : "Script generation failed"
-          );
-        }
-        const autoScenes = rescaleScenesToTargetSeconds(
-          (Array.isArray(scriptData.scenes) ? scriptData.scenes : []) as Scene[],
-          duration
-        );
-        setScenes(autoScenes);
-        setMusicMood(typeof scriptData.musicMood === "string" ? scriptData.musicMood : null);
-
-        // 2. Generate Each Scene
-        const collected: SceneCode[] = [];
-        for (const scene of autoScenes) {
-          setGeneratingSceneId(scene.id);
-          const dirStyle = DIRECTOR_STYLES.find(s => s.id === directorStyle);
-          const res = await fetch("/api/generate-video", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: `[Scene type: ${scene.type}] ${scene.title}: ${scene.text}. Visual: ${scene.visual}${scene.imageUrl ? ` Curated image for this scene: yes (use in template props).` : ""}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
-              duration: scene.duration,
-              aspectVideo: aspectRatio,
-              brandKit,
-              scene,
-            }),
-          });
-          const data = (await parseApiJson(res)) as Record<string, unknown>;
-          if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
-          
-          const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
-          const isValid = isValidGodTemplateJsonString(safeCode);
-          if (!isValid) {
-            console.warn(`Quick generate scene ${scene.id} truncated, using fallback`);
-            collected.push({
-              id: scene.id,
-              code: fallbackSceneJson(scene.text),
-              duration: scene.duration,
-            });
-          } else {
-            collected.push({ id: scene.id, code: safeCode, duration: scene.duration });
-          }
-        }
-        
-        setGeneratingSceneId(null);
-        const track = resolveBackgroundTrack(
-          typeof scriptData.musicMood === "string" ? scriptData.musicMood : musicMood
-        );
-
-        let withAudio = collected;
-        if (voiceoverEnabled && voiceoverConfigured) {
-          try {
-            const generated = await generateVoiceoverForScenes(autoScenes);
-            withAudio = collected.map((c) => ({ ...c, voiceoverUrl: generated[c.id] }));
-          } catch (err: any) {
-            console.warn("[voiceover] quick-generate skipped:", err?.message);
-          }
-        }
-
-        const stitched = stitchScenes(withAudio, {
-          musicSrc: track,
-          duckMusicForVoiceover: voiceoverEnabled,
-        });
-        setSceneCodes(withAudio);
-        setVideoCode(stitched);
-        setStep("preview");
-        autoSaveProject(stitched, duration, autoScenes, { musicMood: typeof scriptData.musicMood === "string" ? scriptData.musicMood : undefined });
-      } else {
-        // Short video: single generation is fine
-        const res = await fetch("/api/generate-video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: getEnhancedPrompt(), duration, aspectVideo: aspectRatio, brandKit }),
-        });
-        const data = (await parseApiJson(res)) as Record<string, unknown>;
-        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Request failed");
-        
-        const safeCode = cleanAiCode(typeof data.videoCode === "string" ? data.videoCode : "");
-
-        const isValid = isValidGodTemplateJsonString(safeCode);
-
-        if (!isValid) throw new Error("The AI generated incomplete code due to length limits. Please try again or use a longer duration to enable scene-based generation.");
-        
-        setVideoCode(safeCode);
-        const apiDurRaw = Number(data.duration);
-        const apiDur =
-          Number.isFinite(apiDurRaw) && apiDurRaw > 0
-            ? Math.max(5, Math.min(300, Math.round(apiDurRaw)))
-            : null;
-        if (apiDur !== null) setDuration(apiDur);
-        setSceneCodes([]);
-        setStep("preview");
-        autoSaveProject(safeCode, apiDur ?? duration, undefined, { musicMood: musicMood ?? undefined });
-      }
-    } catch (err: any) {
-      alert(`Generation failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-      setGeneratingSceneId(null);
-    }
   };
 
   // ── Auto Save ──
@@ -1005,9 +830,9 @@ export default function GenerateClient() {
                 </div>
               </div>
 
-              {/* AI Director Mode */}
+              {/* Style preset (optional) */}
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Crown className="w-3 h-3"/> Director Mode</label>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Crown className="w-3 h-3"/> Style <span className="text-slate-600 font-normal normal-case tracking-normal ml-1">(optional)</span></label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {DIRECTOR_STYLES.map(ds => {
                     const Icon = ds.icon;
@@ -1020,21 +845,6 @@ export default function GenerateClient() {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Platform Presets */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Layout className="w-3 h-3"/> Platform</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {PLATFORM_PRESETS.map(p => (
-                    <button key={p.id} onClick={() => applyPlatformPreset(p.id)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[8px] font-bold border transition-all ${
-                        selectedPlatform === p.id ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400" : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10"
-                      }`}>
-                      {p.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -1062,117 +872,87 @@ export default function GenerateClient() {
                 )}
               </div>
 
-              {/* AI Voiceover */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1">
-                  <Mic className="w-3 h-3"/> AI Voiceover
-                  {voiceoverConfigured === false && (
-                    <span className="ml-auto text-[7px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                      Setup
-                    </span>
-                  )}
-                </label>
-                <button
-                  onClick={() => setVoiceoverEnabled((v) => !v)}
-                  className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
-                    voiceoverEnabled
-                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                      : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Mic size={12}/> Narration {voiceoverEnabled ? "ON" : "OFF"}
-                  </span>
-                  <span className={`w-7 h-3.5 rounded-full transition-colors relative ${voiceoverEnabled ? "bg-emerald-500" : "bg-slate-700"}`}>
-                    <span
-                      className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
-                      style={{ transform: voiceoverEnabled ? "translateX(14px)" : "translateX(2px)" }}
-                    />
-                  </span>
-                </button>
-                {voiceoverEnabled && (
-                  <select
-                    value={voiceoverVoice}
-                    onChange={(e) => setVoiceoverVoice(e.target.value)}
-                    className="w-full text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 text-slate-200"
-                  >
-                    {VOICE_PRESETS.map((v) => (
-                      <option key={v.id} value={v.id}>{v.label}</option>
-                    ))}
-                  </select>
-                )}
-                {voiceoverConfigured === false && voiceoverEnabled && (
-                  <p className="text-[9px] text-amber-400/80 leading-relaxed ml-1">
-                    Add <code className="bg-black/40 px-1 rounded">ELEVENLABS_API_KEY</code> to your env to enable real AI narration.
-                  </p>
-                )}
-              </div>
+              {/* Narration (Voiceover + Avatar grouped) */}
+              <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Narration</label>
+                  <span className="text-[8px] text-slate-600 font-normal">optional</span>
+                </div>
 
-              {/* AI Avatar */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1">
-                  <User className="w-3 h-3"/> AI Avatar
-                  <span className="ml-auto text-[7px] font-bold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-1.5 py-0.5 rounded">
-                    Beta
-                  </span>
-                </label>
-                <button
-                  onClick={() => {
-                    if (!avatarConfigured) {
-                      alert(avatarMessage || "AI Avatar in beta — set HEYGEN_API_KEY / DID_API_KEY / SADTALKER_ENDPOINT_URL.");
-                      return;
-                    }
-                    setAvatarEnabled((v) => !v);
-                  }}
-                  className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
-                    avatarEnabled
-                      ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
-                      : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <User size={12}/> Avatar narrator {avatarEnabled ? "ON" : "OFF"}
-                  </span>
-                  <span className={`w-7 h-3.5 rounded-full transition-colors relative ${avatarEnabled ? "bg-purple-500" : "bg-slate-700"}`}>
-                    <span
-                      className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
-                      style={{ transform: avatarEnabled ? "translateX(14px)" : "translateX(2px)" }}
-                    />
-                  </span>
-                </button>
-                {avatarConfigured === false && (
-                  <p className="text-[9px] text-purple-400/70 leading-relaxed ml-1">
-                    {avatarMessage || "Set HEYGEN_API_KEY, DID_API_KEY, or SADTALKER_ENDPOINT_URL to render a talking-head narrator."}
-                  </p>
-                )}
-              </div>
-
-              {/* Variations (visible when prompt exists) */}
-              {prompt && (
+                {/* Voiceover toggle */}
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1"><Shuffle className="w-3 h-3"/> Variations</label>
-                  <div className="flex gap-1.5">
-                    {["hooks","styles","ctas","angles"].map(t => (
-                      <button key={t} onClick={() => handleGenerateVariations(t)} disabled={generatingVariations}
-                        className="flex-1 py-1.5 rounded-lg text-[7px] font-bold uppercase tracking-wider bg-white/5 border border-white/10 text-slate-500 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  {generatingVariations && <p className="text-[9px] text-purple-400/70 animate-pulse ml-1">Generating variations...</p>}
-                  {variations.length > 0 && (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto scrollbar-custom">
-                      {variations.map((v: any) => (
-                        <button key={v.id} onClick={() => setPrompt(prompt + "\n" + v.promptModifier)}
-                          className="w-full text-left p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
-                          <p className="text-[9px] font-bold text-white">{v.name}</p>
-                          <p className="text-[8px] text-slate-500 line-clamp-1">{v.description}</p>
-                        </button>
+                  <button
+                    onClick={() => setVoiceoverEnabled((v) => !v)}
+                    className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
+                      voiceoverEnabled
+                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Mic size={12}/> AI Voiceover
+                      {voiceoverConfigured === false && (
+                        <span className="text-[7px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                          Setup
+                        </span>
+                      )}
+                    </span>
+                    <span className={`w-7 h-3.5 rounded-full transition-colors relative ${voiceoverEnabled ? "bg-emerald-500" : "bg-slate-700"}`}>
+                      <span
+                        className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
+                        style={{ transform: voiceoverEnabled ? "translateX(14px)" : "translateX(2px)" }}
+                      />
+                    </span>
+                  </button>
+                  {voiceoverEnabled && (
+                    <select
+                      value={voiceoverVoice}
+                      onChange={(e) => setVoiceoverVoice(e.target.value)}
+                      className="w-full text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 text-slate-200"
+                    >
+                      {VOICE_PRESETS.map((v) => (
+                        <option key={v.id} value={v.id}>{v.label}</option>
                       ))}
-                    </div>
+                    </select>
+                  )}
+                  {voiceoverConfigured === false && voiceoverEnabled && (
+                    <p className="text-[9px] text-amber-400/80 leading-relaxed ml-1">
+                      Add <code className="bg-black/40 px-1 rounded">ELEVENLABS_API_KEY</code> to enable real AI narration.
+                    </p>
                   )}
                 </div>
-              )}
+
+                {/* Avatar toggle */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      if (!avatarConfigured) {
+                        alert(avatarMessage || "AI Avatar in beta — set HEYGEN_API_KEY / DID_API_KEY / SADTALKER_ENDPOINT_URL.");
+                        return;
+                      }
+                      setAvatarEnabled((v) => !v);
+                    }}
+                    className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
+                      avatarEnabled
+                        ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <User size={12}/> AI Avatar
+                      <span className="text-[7px] font-bold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                        Beta
+                      </span>
+                    </span>
+                    <span className={`w-7 h-3.5 rounded-full transition-colors relative ${avatarEnabled ? "bg-purple-500" : "bg-slate-700"}`}>
+                      <span
+                        className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
+                        style={{ transform: avatarEnabled ? "translateX(14px)" : "translateX(2px)" }}
+                      />
+                    </span>
+                  </button>
+                </div>
+              </div>
             </>
           )}
 
@@ -1281,26 +1061,16 @@ export default function GenerateClient() {
           <div className="grid gap-3 mt-auto pt-4">
             {/* Script generation button */}
             {(step === "input" || step === "brand-review") && (
-              <>
-                <motion.button whileHover={{scale:prompt?1.02:1}} whileTap={{scale:prompt?0.98:1}}
-                  onClick={handleGenerateScript}
-                  disabled={!prompt || generatingScript || loading}
-                  className="w-full relative overflow-hidden group bg-[#020617] border border-purple-500/30 text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 disabled:opacity-50">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-indigo-600 opacity-80 group-hover:opacity-100 transition-opacity"/>
-                  <div className="relative z-10 flex items-center gap-2">
-                    {generatingScript ? <Loader2 className="animate-spin w-4 h-4"/> : <Wand2 size={16}/>}
-                    {generatingScript ? "Creating Script..." : "Generate Script"}
-                  </div>
-                </motion.button>
-
-                <motion.button whileHover={{scale:prompt?1.02:1}} whileTap={{scale:prompt?0.98:1}}
-                  onClick={handleQuickGenerate}
-                  disabled={!prompt || loading || generatingScript}
-                  className="w-full bg-white/5 border border-white/10 text-slate-400 py-3 rounded-xl font-bold uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-white/10 disabled:opacity-50 transition-all">
-                  {loading ? <Loader2 className="animate-spin w-4 h-4"/> : <Sparkles size={14}/>}
-                  {loading ? "Generating..." : "Quick Generate (No Script)"}
-                </motion.button>
-              </>
+              <motion.button whileHover={{scale:prompt?1.02:1}} whileTap={{scale:prompt?0.98:1}}
+                onClick={handleGenerateScript}
+                disabled={!prompt || generatingScript || loading}
+                className="w-full relative overflow-hidden group bg-[#020617] border border-purple-500/30 text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 disabled:opacity-50">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-indigo-600 opacity-80 group-hover:opacity-100 transition-opacity"/>
+                <div className="relative z-10 flex items-center gap-2">
+                  {generatingScript ? <Loader2 className="animate-spin w-4 h-4"/> : <Wand2 size={16}/>}
+                  {generatingScript ? "Creating Script..." : "Generate Video"}
+                </div>
+              </motion.button>
             )}
 
             {/* Generate scenes button */}
