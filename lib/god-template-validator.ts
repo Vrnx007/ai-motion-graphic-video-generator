@@ -21,6 +21,8 @@ const KNOWN_TEMPLATES = new Set([
   "ComparisonSplit",
   "OrbFieldHero",
   "GlyphRhythm",
+  "ParticleStorm",
+  "MorphHeadline",
 ]);
 
 export type SceneTypeHint = { type?: string; templateName?: string };
@@ -104,7 +106,12 @@ export function validateGodTemplatePayload(
     }
   }
 
-  if (name === "OrbFieldHero" || name === "GlyphRhythm") {
+  if (
+    name === "OrbFieldHero" ||
+    name === "GlyphRhythm" ||
+    name === "ParticleStorm" ||
+    name === "MorphHeadline"
+  ) {
     const h = p.headline;
     if (typeof h !== "string" || !h.trim()) {
       errors.push(`${name} requires props.headline`);

@@ -11,7 +11,7 @@
  */
 
 import * as cheerio from "cheerio";
-import sharp from "sharp";
+import { getSharp } from "./sharp-safe";
 import {
   normalizeColor,
   hexToRgb,
@@ -152,6 +152,14 @@ function getOrigin(url: string): string {
 
 // ─── Logo Resolution (5-tier chain) ──────────────────────
 
+/** First URL that passes validateImageUrl (checks run in parallel for speed / serverless CPU limits). */
+async function firstValidLogoUrl(urls: string[]): Promise<string | null> {
+  const uniq = [...new Set(urls.filter(Boolean))].slice(0, 16);
+  if (!uniq.length) return null;
+  const hits = await Promise.all(uniq.map(async (u) => ((await validateImageUrl(u)) ? u : null)));
+  return hits.find((x): x is string => x !== null) ?? null;
+}
+
 async function validateImageUrl(url: string): Promise<boolean> {
   try {
     const res = await safeFetch(url, { acceptImage: true });
@@ -163,7 +171,12 @@ async function validateImageUrl(url: string): Promise<boolean> {
     // SVGs skip raster validation
     if (ct.includes("svg")) return true;
     try {
-      const meta = await sharp(buf).metadata();
+      const sharpInst = await getSharp();
+      if (!sharpInst) {
+        // Without native sharp, accept likely rasters at reasonable size (avoid hard-failing extract-brand).
+        return /image\/(png|jpe?g|webp|gif|avif)/i.test(ct) && buf.length >= 2048;
+      }
+      const meta = await sharpInst(buf).metadata();
       if (!meta.width || !meta.height) return false;
       if (meta.width < 32 || meta.height < 32) return false;
       if (Math.max(meta.width, meta.height) / Math.min(meta.width, meta.height) > 8) return false;
@@ -240,21 +253,22 @@ async function resolveLogo(
     }
   });
 
-  for (const c of candidates) {
-    if (await validateImageUrl(c)) return c;
-  }
+  const fromDom = await firstValidLogoUrl(candidates);
+  if (fromDom) return fromDom;
 
-  // Tier 3: Google favicon API
-  for (const sz of [128, 64, 48, 32]) {
-    const gUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=${sz}`;
-    const res = await safeFetch(gUrl, { acceptImage: true });
-    if (res) {
+  // Tier 3: Google favicon API (parallel)
+  const gHits = await Promise.all(
+    [128, 64, 48, 32].map(async (sz) => {
+      const gUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=${sz}`;
+      const res = await safeFetch(gUrl, { acceptImage: true });
+      if (!res) return null;
       const buf = Buffer.from(await res.arrayBuffer());
-      if (!GOOGLE_FAVICON_DEFAULT_SIZES.has(buf.length) && buf.length >= 500) {
-        return gUrl;
-      }
-    }
-  }
+      if (!GOOGLE_FAVICON_DEFAULT_SIZES.has(buf.length) && buf.length >= 500) return gUrl;
+      return null;
+    })
+  );
+  const gPick = gHits.find((x): x is string => x !== null);
+  if (gPick) return gPick;
 
   // Tier 4: <link rel="icon|apple-touch-icon"> sorted by size
   const linkIcons: Array<{ href: string; size: number }> = [];
@@ -265,9 +279,8 @@ async function resolveLogo(
     if (href) linkIcons.push({ href: resolveUrl(href, baseUrl), size: sizeNum });
   });
   linkIcons.sort((a, b) => b.size - a.size);
-  for (const icon of linkIcons) {
-    if (await validateImageUrl(icon.href)) return icon.href;
-  }
+  const fromIcons = await firstValidLogoUrl(linkIcons.map((x) => x.href));
+  if (fromIcons) return fromIcons;
 
   // Tier 5: /favicon.ico
   const faviconUrl = `${getOrigin(baseUrl)}/favicon.ico`;
@@ -361,6 +374,9 @@ function resolveSiteBrandColor($: cheerio.CheerioAPI, html: string): string | nu
 
 async function extractColorPalette(imageUrl: string): Promise<string[]> {
   try {
+    const sharpInst = await getSharp();
+    if (!sharpInst) return [];
+
     const res = await safeFetch(imageUrl, { acceptImage: true });
     if (!res) return [];
     const buf = Buffer.from(await res.arrayBuffer());
@@ -376,7 +392,7 @@ async function extractColorPalette(imageUrl: string): Promise<string[]> {
     }
 
     // Resize to 30x30 for sampling
-    const { data, info } = await sharp(imageBuf)
+    const { data } = await sharpInst(imageBuf)
       .resize(30, 30, { fit: "fill" })
       .raw()
       .ensureAlpha()
@@ -427,6 +443,28 @@ async function extractColorPalette(imageUrl: string): Promise<string[]> {
 
 // ─── Image Extraction ────────────────────────────────────
 
+/** Normalize URL for dedupe: collapse Next/Image and Cloudinary variants to canonical form. */
+function normalizeImageKey(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.pathname === "/_next/image" && u.searchParams.has("url")) {
+      const inner = u.searchParams.get("url") || "";
+      try {
+        return new URL(inner, u.origin).href;
+      } catch {
+        return inner;
+      }
+    }
+    // Strip cache-busters that don't change the visual
+    ["v", "t", "ts", "cb", "version", "_t", "w", "q", "fm", "auto", "fit"].forEach((p) =>
+      u.searchParams.delete(p)
+    );
+    return u.href;
+  } catch {
+    return url;
+  }
+}
+
 function pushImage(
   images: Array<{ url: string; alt: string; context: string }>,
   seen: Set<string>,
@@ -438,18 +476,20 @@ function pushImage(
   if (images.length >= max) return;
   if (!url || url.startsWith("data:") || IMG_BLACKLIST.test(url)) return;
   if (!isLikelyImageAssetUrl(url)) return;
-  if (seen.has(url)) return;
-  seen.add(url);
+  const key = normalizeImageKey(url);
+  if (seen.has(key)) return;
+  seen.add(key);
   images.push({ url, alt: alt || "", context });
 }
 
 function extractImages(
   $: cheerio.CheerioAPI,
-  baseUrl: string
+  baseUrl: string,
+  html: string
 ): Array<{ url: string; alt: string; context: string }> {
   const images: Array<{ url: string; alt: string; context: string }> = [];
   const seen = new Set<string>();
-  const max = 22;
+  const max = 36;
 
   // OG images (highest priority)
   $('meta[property="og:image"], meta[name="og:image"]').each((_, el) => {
@@ -527,24 +567,118 @@ function extractImages(
     pushImage(images, seen, url, alt, "hero", max);
   });
 
-  // Product / feature images
+  // Product / feature images — broader pattern (covers data-src, data-srcset, srcset, lazyload)
   $("img").each((_, el) => {
     if (images.length >= max) return;
     const $el = $(el);
-    const srcset = $el.attr("srcset");
+    const srcset =
+      $el.attr("srcset") ||
+      $el.attr("data-srcset") ||
+      $el.attr("data-lazy-srcset") ||
+      "";
     const picked = pickLargestFromSrcset(srcset, baseUrl);
-    const src = picked || $el.attr("src") || $el.attr("data-src");
+    const src =
+      picked ||
+      $el.attr("src") ||
+      $el.attr("data-src") ||
+      $el.attr("data-lazy-src") ||
+      $el.attr("data-original") ||
+      $el.attr("data-image") ||
+      "";
     if (!src || src.startsWith("data:") || IMG_BLACKLIST.test(src)) return;
     const url = resolveUrl(src, baseUrl);
-    if (seen.has(url)) return;
     const width = parseInt($el.attr("width") || "0", 10);
     const height = parseInt($el.attr("height") || "0", 10);
-    if ((width > 0 && width < 40) || (height > 0 && height < 40)) return;
+    if ((width > 0 && width < 80) || (height > 0 && height < 60)) return;
     const alt = $el.attr("alt") || "";
     pushImage(images, seen, url, alt, "page", max);
   });
 
-  return images.slice(0, 18);
+  // <noscript> fallbacks for lazy-loaded images (SaaS sites often hide real <img> here)
+  $("noscript").each((_, el) => {
+    if (images.length >= max) return;
+    const inner = $(el).html() || "";
+    const matches = inner.match(/<img[^>]+>/gi) || [];
+    matches.forEach((tag) => {
+      const m = tag.match(/\bsrc=["']([^"']+)["']/i);
+      const altM = tag.match(/\balt=["']([^"']*)["']/i);
+      if (m?.[1]) {
+        const url = resolveUrl(m[1], baseUrl);
+        pushImage(images, seen, url, altM?.[1] || "", "noscript", max);
+      }
+    });
+  });
+
+  // Inline-style background-image discovery (hero / banner blocks often use CSS bg)
+  const styleAttrs = $("*[style*='background']").toArray().slice(0, 200);
+  for (const el of styleAttrs) {
+    if (images.length >= max) break;
+    const styleStr = $(el).attr("style") || "";
+    const m = styleStr.match(/background[^:]*:[^;]*url\(['"]?([^'")]+)['"]?\)/i);
+    if (m?.[1]) {
+      const url = resolveUrl(m[1], baseUrl);
+      pushImage(images, seen, url, "Inline background", "css-bg", max);
+    }
+  }
+
+  // <style> blocks: scan for url(...) referenced from any selector that mentions hero/banner/screenshot
+  const styleBlocks = $("style").toArray();
+  for (const el of styleBlocks) {
+    if (images.length >= max) break;
+    const css = $(el).html() || "";
+    // grab url(...) tokens within blocks whose selector likely hosts a hero image
+    const heroBlocks = css.match(/\.(?:hero|banner|cover|screenshot|product|demo)[^{]*\{[^}]+\}/gi) || [];
+    for (const block of heroBlocks) {
+      const urlMatch = block.match(/url\(['"]?([^'")]+)['"]?\)/i);
+      if (urlMatch?.[1]) {
+        const url = resolveUrl(urlMatch[1], baseUrl);
+        pushImage(images, seen, url, "Stylesheet hero", "css-block", max);
+      }
+    }
+  }
+
+  // JSON-LD structured data: Product / Organization / WebSite often expose images
+  $('script[type="application/ld+json"]').each((_, el) => {
+    if (images.length >= max) return;
+    try {
+      const json = JSON.parse($(el).contents().text() || "null") as unknown;
+      const walk = (node: unknown) => {
+        if (!node) return;
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+          return;
+        }
+        if (typeof node === "object") {
+          const obj = node as Record<string, unknown>;
+          const collect = (val: unknown, ctx: string) => {
+            if (typeof val === "string") {
+              const url = resolveUrl(val, baseUrl);
+              pushImage(images, seen, url, "Structured-data image", ctx, max);
+            } else if (val && typeof val === "object" && "url" in val) {
+              const inner = (val as { url?: unknown }).url;
+              if (typeof inner === "string") {
+                const url = resolveUrl(inner, baseUrl);
+                pushImage(images, seen, url, "Structured-data image", ctx, max);
+              }
+            } else if (Array.isArray(val)) {
+              val.forEach((v) => collect(v, ctx));
+            }
+          };
+          if (obj.image) collect(obj.image, "jsonld-image");
+          if (obj.logo) collect(obj.logo, "jsonld-logo");
+          if (obj.thumbnailUrl) collect(obj.thumbnailUrl, "jsonld-thumb");
+          if (obj.contentUrl) collect(obj.contentUrl, "jsonld-content");
+          Object.values(obj).forEach(walk);
+        }
+      };
+      walk(json);
+    } catch {
+      /* malformed ld+json — skip */
+    }
+  });
+
+  // Limit final returned list slightly under cap so downstream picker has headroom
+  return images.slice(0, 30);
 }
 
 // ─── Content Extraction ──────────────────────────────────
@@ -701,7 +835,7 @@ export async function extractFromUrl(url: string): Promise<BrandData> {
     resolveLogo($, url),
     Promise.resolve(resolveSiteBrandColor($, html)),
     Promise.resolve(extractContent($)),
-    Promise.resolve(extractImages($, url)),
+    Promise.resolve(extractImages($, url, html)),
   ]);
 
   const testimonials = extractTestimonials($, url);

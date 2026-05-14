@@ -14,6 +14,8 @@ import { TestimonialSpotlight } from "./TestimonialSpotlight";
 import { ComparisonSplit } from "./ComparisonSplit";
 import { OrbFieldHero } from "./OrbFieldHero";
 import { GlyphRhythm } from "./GlyphRhythm";
+import { ParticleStorm } from "./ParticleStorm";
+import { MorphHeadline } from "./MorphHeadline";
 
 export interface TemplateProps {
   templateName: string;
@@ -50,6 +52,10 @@ export const TemplateRegistry: React.FC<TemplateProps> = ({ templateName, props 
       return <OrbFieldHero {...props} />;
     case "GlyphRhythm":
       return <GlyphRhythm {...props} />;
+    case "ParticleStorm":
+      return <ParticleStorm {...props} />;
+    case "MorphHeadline":
+      return <MorphHeadline {...props} />;
     default:
       // Fallback — render as KineticHero since it handles all basic props
       return <KineticHero {...props} />;

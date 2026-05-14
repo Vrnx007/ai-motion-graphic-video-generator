@@ -176,6 +176,14 @@ AVAILABLE TEMPLATES:
    Best for: mid-video abstract interlude, metrics vibe without real numbers, tech pulse.
    Props: { headline (string, max ~6 words), subheadline (string, optional) }
 
+15. "ParticleStorm" — Cinematic 220-particle field with depth, motion-blur trail streaks, volumetric light cone, chromatic-aberration title. NO screenshot.
+   Best for: opener, mid-video "wow" beat, energy peak, drama. Always pairs with a 4–6 word headline.
+   Props: { headline (string, MAX 6 words — billboard), subheadline (string, optional, MAX 12 words) }
+
+16. "MorphHeadline" — Letter-by-letter kinetic typography with spring + blur trails + radial pulse rings + rotating glyph ghosts. NO screenshot.
+   Best for: hero claim, brand statement, value proposition that should feel handcrafted by After Effects.
+   Props: { headline (string, MAX 6 words), subheadline (string, optional, MAX 12 words) }
+
 ${brandBlock}
 ${sceneBlock}
 
@@ -268,8 +276,43 @@ OUTPUT FORMAT:
       typeof parsedOut.props === "object" && parsedOut.props !== null
         ? (parsedOut.props as Record<string, unknown>)
         : {};
+
+    // If the scene came in with a curated imageUrl, force it through. The LLM is
+    // told to wire it but routinely drops it on non-demo scenes — we won't allow that.
+    const forcedImage =
+      scene?.imageUrl
+        ? `/api/image-proxy?url=${encodeURIComponent(scene.imageUrl)}`
+        : null;
+
+    // Templates that take a single imageUrl prop natively.
+    const IMAGE_TEMPLATES = new Set([
+      "FeatureShowcase",
+      "SplitScreen",
+      "DemoBrowserWalkthrough",
+      "ComparisonSplit",
+      "TestimonialSpotlight",
+      "LogoReveal",
+      "KineticHero",
+    ]);
+
+    let finalTemplate = String(parsedOut.templateName || "KineticHero");
+    if (forcedImage && !IMAGE_TEMPLATES.has(finalTemplate)) {
+      // Switch to a screenshot-friendly template based on scene type
+      const t = String(scene?.type || "").toLowerCase();
+      finalTemplate =
+        t === "demo"
+          ? "DemoBrowserWalkthrough"
+          : t === "comparison"
+            ? "ComparisonSplit"
+            : t === "problem"
+              ? "SplitScreen"
+              : "FeatureShowcase";
+      parsedOut.templateName = finalTemplate;
+    }
+
     parsedOut.props = {
       ...prevProps,
+      ...(forcedImage ? { imageUrl: forcedImage } : {}),
       primaryColor: brandKit?.colors?.primary || "#3B82F6",
       secondaryColor: brandKit?.colors?.secondary || "#7C3AED",
       backgroundColor: brandKit?.colors?.background || "#0F172A",

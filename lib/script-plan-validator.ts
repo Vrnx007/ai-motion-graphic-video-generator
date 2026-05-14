@@ -32,6 +32,8 @@ const TEMPLATE_NAMES = new Set([
   "ComparisonSplit",
   "OrbFieldHero",
   "GlyphRhythm",
+  "ParticleStorm",
+  "MorphHeadline",
 ]);
 
 /** Typography / 3D / abstract — not screenshot-first */
@@ -42,6 +44,8 @@ const MOTION_FIRST_TEMPLATES = new Set([
   "OrbFieldHero",
   "GlyphRhythm",
   "LogoReveal",
+  "ParticleStorm",
+  "MorphHeadline",
 ]);
 
 export type PlanValidationIssue = { code: string; message: string };

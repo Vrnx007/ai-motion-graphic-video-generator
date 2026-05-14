@@ -14,7 +14,7 @@ import {
   Loader2, Wand2, Share2, Check, Download, LayoutDashboard, X,
   Globe, Sparkles, Film, Megaphone, Monitor, Presentation, Play,
   Upload, Image, Palette, Copy, Zap, Crown, Rocket, Minimize2,
-  Flame, Laptop, Target, Shuffle, Layout,
+  Flame, Laptop, Target, Shuffle, Layout, Mic, User,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -64,6 +64,8 @@ const GOD_TEMPLATE_IDS = [
   "ComparisonSplit",
   "OrbFieldHero",
   "GlyphRhythm",
+  "ParticleStorm",
+  "MorphHeadline",
 ] as const;
 
 const PLATFORM_PRESETS = [
@@ -163,6 +165,46 @@ export default function GenerateClient() {
   const [projectId, setProjectId] = useState<string | null>(null);
   /** From generate-script; used for background track selection (Phase 3) */
   const [musicMood, setMusicMood] = useState<string | null>(null);
+
+  // ── Voiceover / Avatar state ──
+  const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
+  const [voiceoverVoice, setVoiceoverVoice] = useState("rachel");
+  const [voiceoverConfigured, setVoiceoverConfigured] = useState<boolean | null>(null);
+  const [voiceoverAudio, setVoiceoverAudio] = useState<Record<number, string>>({});
+  const [generatingVoiceover, setGeneratingVoiceover] = useState(false);
+  const [avatarEnabled, setAvatarEnabled] = useState(false);
+  const [avatarConfigured, setAvatarConfigured] = useState<boolean | null>(null);
+  const [avatarMessage, setAvatarMessage] = useState<string>("");
+
+  const VOICE_PRESETS: Array<{ id: string; label: string }> = [
+    { id: "rachel", label: "Rachel — warm female" },
+    { id: "adam", label: "Adam — narrator male" },
+    { id: "bella", label: "Bella — friendly female" },
+    { id: "antoni", label: "Antoni — confident male" },
+    { id: "domi", label: "Domi — bold female" },
+    { id: "arnold", label: "Arnold — strong male" },
+  ];
+
+  // Probe voiceover/avatar configuration once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/voiceover");
+        const d = (await parseApiJson<{ configured?: boolean }>(r)).configured;
+        setVoiceoverConfigured(Boolean(d));
+      } catch {
+        setVoiceoverConfigured(false);
+      }
+      try {
+        const r = await fetch("/api/avatar");
+        const d = await parseApiJson<{ configured?: boolean; message?: string }>(r);
+        setAvatarConfigured(Boolean(d.configured));
+        setAvatarMessage(typeof d.message === "string" ? d.message : "");
+      } catch {
+        setAvatarConfigured(false);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const rid = searchParams.get("resume");
@@ -372,14 +414,84 @@ export default function GenerateClient() {
 
     setGeneratingSceneId(null);
     const track = resolveBackgroundTrack(musicMood);
-    const stitched = stitchScenes(collected, { musicSrc: track });
-    setSceneCodes(collected);
+
+    let withAudio = collected;
+    if (voiceoverEnabled && voiceoverConfigured) {
+      try {
+        const generated = await generateVoiceoverForScenes(scenes);
+        withAudio = collected.map((c) => ({ ...c, voiceoverUrl: generated[c.id] }));
+      } catch (err: any) {
+        console.warn("[voiceover] skipped:", err?.message);
+      }
+    }
+
+    const stitched = stitchScenes(withAudio, {
+      musicSrc: track,
+      duckMusicForVoiceover: voiceoverEnabled,
+    });
+    setSceneCodes(withAudio);
     setVideoCode(stitched);
     setLoading(false);
     setStep("preview");
-    
-    // Auto-save the project to the library
+
     autoSaveProject(stitched, scenes.reduce((sum, s) => sum + s.duration, 0), scenes, { musicMood: musicMood ?? undefined });
+  };
+
+  /** Hit /api/voiceover once per scene; returns { sceneId: audioDataUrl }. */
+  const generateVoiceoverForScenes = async (
+    sceneList: Scene[]
+  ): Promise<Record<number, string>> => {
+    if (!voiceoverEnabled || !voiceoverConfigured) return {};
+    setGeneratingVoiceover(true);
+    const out: Record<number, string> = {};
+    try {
+      for (const sc of sceneList) {
+        const text =
+          (sc.text && sc.text.trim().length > 0 ? sc.text : sc.title || "").trim();
+        if (!text) continue;
+        try {
+          const r = await fetch("/api/voiceover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, voice: voiceoverVoice }),
+          });
+          const d = (await parseApiJson(r)) as { audioUrl?: string; error?: string };
+          if (r.ok && typeof d.audioUrl === "string") {
+            out[sc.id] = d.audioUrl;
+          } else if (d?.error) {
+            console.warn(`[voiceover] scene ${sc.id}: ${d.error}`);
+          }
+        } catch (e: any) {
+          console.warn(`[voiceover] scene ${sc.id} failed:`, e?.message);
+        }
+      }
+      setVoiceoverAudio((prev) => ({ ...prev, ...out }));
+      return out;
+    } finally {
+      setGeneratingVoiceover(false);
+    }
+  };
+
+  /** Regenerate voiceover only — keeps existing scene visuals intact. */
+  const handleRegenerateVoiceover = async () => {
+    if (!voiceoverConfigured) {
+      alert("Add ELEVENLABS_API_KEY to your environment to enable AI voiceover.");
+      return;
+    }
+    if (scenes.length === 0 || sceneCodes.length === 0) {
+      alert("Generate scenes first, then add a voiceover.");
+      return;
+    }
+    setVoiceoverEnabled(true);
+    const generated = await generateVoiceoverForScenes(scenes);
+    const next = sceneCodes.map((c) => ({ ...c, voiceoverUrl: generated[c.id] }));
+    setSceneCodes(next);
+    const stitched = stitchScenes(next, {
+      musicSrc: resolveBackgroundTrack(musicMood),
+      duckMusicForVoiceover: true,
+    });
+    setVideoCode(stitched);
+    autoSaveProject(stitched, scenes.reduce((s, sc) => s + sc.duration, 0), scenes, { musicMood: musicMood ?? undefined });
   };
 
   // ── Quick Generate (handles long videos by auto-scripting) ──
@@ -455,8 +567,22 @@ export default function GenerateClient() {
         const track = resolveBackgroundTrack(
           typeof scriptData.musicMood === "string" ? scriptData.musicMood : musicMood
         );
-        const stitched = stitchScenes(collected, { musicSrc: track });
-        setSceneCodes(collected);
+
+        let withAudio = collected;
+        if (voiceoverEnabled && voiceoverConfigured) {
+          try {
+            const generated = await generateVoiceoverForScenes(autoScenes);
+            withAudio = collected.map((c) => ({ ...c, voiceoverUrl: generated[c.id] }));
+          } catch (err: any) {
+            console.warn("[voiceover] quick-generate skipped:", err?.message);
+          }
+        }
+
+        const stitched = stitchScenes(withAudio, {
+          musicSrc: track,
+          duckMusicForVoiceover: voiceoverEnabled,
+        });
+        setSceneCodes(withAudio);
         setVideoCode(stitched);
         setStep("preview");
         autoSaveProject(stitched, duration, autoScenes, { musicMood: typeof scriptData.musicMood === "string" ? scriptData.musicMood : undefined });
@@ -936,6 +1062,91 @@ export default function GenerateClient() {
                 )}
               </div>
 
+              {/* AI Voiceover */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1">
+                  <Mic className="w-3 h-3"/> AI Voiceover
+                  {voiceoverConfigured === false && (
+                    <span className="ml-auto text-[7px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                      Setup
+                    </span>
+                  )}
+                </label>
+                <button
+                  onClick={() => setVoiceoverEnabled((v) => !v)}
+                  className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
+                    voiceoverEnabled
+                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Mic size={12}/> Narration {voiceoverEnabled ? "ON" : "OFF"}
+                  </span>
+                  <span className={`w-7 h-3.5 rounded-full transition-colors relative ${voiceoverEnabled ? "bg-emerald-500" : "bg-slate-700"}`}>
+                    <span
+                      className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
+                      style={{ transform: voiceoverEnabled ? "translateX(14px)" : "translateX(2px)" }}
+                    />
+                  </span>
+                </button>
+                {voiceoverEnabled && (
+                  <select
+                    value={voiceoverVoice}
+                    onChange={(e) => setVoiceoverVoice(e.target.value)}
+                    className="w-full text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 text-slate-200"
+                  >
+                    {VOICE_PRESETS.map((v) => (
+                      <option key={v.id} value={v.id}>{v.label}</option>
+                    ))}
+                  </select>
+                )}
+                {voiceoverConfigured === false && voiceoverEnabled && (
+                  <p className="text-[9px] text-amber-400/80 leading-relaxed ml-1">
+                    Add <code className="bg-black/40 px-1 rounded">ELEVENLABS_API_KEY</code> to your env to enable real AI narration.
+                  </p>
+                )}
+              </div>
+
+              {/* AI Avatar */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1">
+                  <User className="w-3 h-3"/> AI Avatar
+                  <span className="ml-auto text-[7px] font-bold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-1.5 py-0.5 rounded">
+                    Beta
+                  </span>
+                </label>
+                <button
+                  onClick={() => {
+                    if (!avatarConfigured) {
+                      alert(avatarMessage || "AI Avatar in beta — set HEYGEN_API_KEY / DID_API_KEY / SADTALKER_ENDPOINT_URL.");
+                      return;
+                    }
+                    setAvatarEnabled((v) => !v);
+                  }}
+                  className={`w-full py-2.5 px-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center justify-between transition-all ${
+                    avatarEnabled
+                      ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <User size={12}/> Avatar narrator {avatarEnabled ? "ON" : "OFF"}
+                  </span>
+                  <span className={`w-7 h-3.5 rounded-full transition-colors relative ${avatarEnabled ? "bg-purple-500" : "bg-slate-700"}`}>
+                    <span
+                      className="absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform"
+                      style={{ transform: avatarEnabled ? "translateX(14px)" : "translateX(2px)" }}
+                    />
+                  </span>
+                </button>
+                {avatarConfigured === false && (
+                  <p className="text-[9px] text-purple-400/70 leading-relaxed ml-1">
+                    {avatarMessage || "Set HEYGEN_API_KEY, DID_API_KEY, or SADTALKER_ENDPOINT_URL to render a talking-head narrator."}
+                  </p>
+                )}
+              </div>
+
               {/* Variations (visible when prompt exists) */}
               {prompt && (
                 <div className="space-y-2">
@@ -1146,6 +1357,17 @@ export default function GenerateClient() {
                   <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/30 break-all">
                     <code className="text-[10px] text-blue-300 font-mono">{shareUrl}</code>
                   </div>
+                )}
+
+                {voiceoverConfigured && (
+                  <button
+                    onClick={handleRegenerateVoiceover}
+                    disabled={generatingVoiceover}
+                    className="w-full py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-emerald-300 text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500/15 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  >
+                    {generatingVoiceover ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mic className="w-3 h-3"/>}
+                    {generatingVoiceover ? "Generating…" : "Generate / Refresh Voiceover"}
+                  </button>
                 )}
 
                 <button onClick={() => { setStep("input"); setVideoCode(""); setScenes([]); setSceneCodes([]); setMusicMood(null); }}

@@ -58,28 +58,39 @@ function parseComposition(code: string, bgTrack: string): {
     if (parsed.type === "template_sequence" && Array.isArray(parsed.sequences)) {
       const track =
         (typeof parsed.musicSrc === "string" && parsed.musicSrc.trim()) || bgTrack;
+      const duckMusic = Boolean(parsed.duckMusicForVoiceover);
       const { AbsoluteFill, Audio, Sequence } = Remotion;
       const sequences = parsed.sequences as Array<{
         fromFrame?: number;
         durationInFrames?: number;
         templateName?: string;
         props?: Record<string, unknown>;
+        voiceoverUrl?: string;
       }>;
+      const hasAnyVO = sequences.some((s) => typeof s.voiceoverUrl === "string" && s.voiceoverUrl);
+      const musicVolume = duckMusic && hasAnyVO ? 0.12 : 0.35;
       const Comp = () => (
         <AbsoluteFill style={{ backgroundColor: "#000" }}>
-          <Audio src={track} volume={0.35} />
-          {sequences.map((seq, i) => (
-            <Sequence
-              key={i}
-              from={Number(seq.fromFrame) || 0}
-              durationInFrames={Math.max(1, Number(seq.durationInFrames) || 1)}
-            >
-              <TemplateRegistry
-                templateName={String(seq.templateName || "KineticHero")}
-                props={seq.props || {}}
-              />
-            </Sequence>
-          ))}
+          <Audio src={track} volume={musicVolume} />
+          {sequences.map((seq, i) => {
+            const from = Number(seq.fromFrame) || 0;
+            const dur = Math.max(1, Number(seq.durationInFrames) || 1);
+            return (
+              <React.Fragment key={i}>
+                <Sequence from={from} durationInFrames={dur}>
+                  <TemplateRegistry
+                    templateName={String(seq.templateName || "KineticHero")}
+                    props={seq.props || {}}
+                  />
+                </Sequence>
+                {seq.voiceoverUrl ? (
+                  <Sequence from={from} durationInFrames={dur}>
+                    <Audio src={seq.voiceoverUrl} volume={1} />
+                  </Sequence>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
         </AbsoluteFill>
       );
       return { Component: Comp, error: null };

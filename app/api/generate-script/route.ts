@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { validateScenePlan, maxScreenshotHeavyScenes, minMotionFirstScenes } from "@/lib/script-plan-validator";
 import { getModelChain } from "@/lib/gemini-models";
+import { assignBrandImagesToScenes } from "@/lib/scene-image-mapper";
 
 export const maxDuration = 120;
 
@@ -242,6 +243,8 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       '"DemoBrowserWalkthrough" — Browser chrome + cursor on screenshot. Best for: UI tour — use sparingly (counts toward screenshot budget).',
       '"OrbFieldHero" — Pure gradient/orb motion, no screenshot. Best for: hook, abstract beats.',
       '"GlyphRhythm" — EQ bars + particles, no screenshot. Best for: interludes, tech pulse.',
+      '"ParticleStorm" — 220-particle field + volumetric light cone + chromatic-aberration title. CINEMATIC opener / mid-beat. No screenshot.',
+      '"MorphHeadline" — Letter-by-letter kinetic title with spring + blur + rotating glyph ghosts. Best for: hero claim, wow moment, taglines. No screenshot.',
       '"IntegrationShowcase" — Horizontal partner / integration logos with staggered motion. Best for: proof, ecosystem, trust strip.',
       '"TestimonialSpotlight" — Quote card with author, subtle parallax, glow frame. Best for: social-proof, testimonial.',
       '"ComparisonSplit" — Before/after or us-vs-them split with kinetic divider. Best for: problem, differentiation.',
@@ -361,6 +364,15 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       if (issues.length > 0) {
         console.warn("[generate-script] Repair pass still has issues (returning best effort):", issues);
       }
+    }
+
+    // Force curated brand screenshots onto screenshot-friendly scenes so the AI cannot silently drop them.
+    const brandImages = Array.isArray(brandKit?.images) ? brandKit.images : [];
+    if (brandImages.length > 0) {
+      scenePlan.scenes = assignBrandImagesToScenes(
+        scenePlan.scenes as unknown as import("@/components/SceneTimeline").Scene[],
+        brandImages
+      ) as unknown as typeof scenePlan.scenes;
     }
 
     return NextResponse.json(scenePlan);

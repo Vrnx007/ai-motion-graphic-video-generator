@@ -7,10 +7,14 @@ export interface SceneCode {
   id: number;
   code: string;
   duration: number;
+  /** Optional per-scene voiceover audio URL (data: URI or hosted MP3). */
+  voiceoverUrl?: string;
 }
 
 export type StitchOptions = {
   musicSrc?: string;
+  /** When true, lowers the background music while VO scenes play. */
+  duckMusicForVoiceover?: boolean;
 };
 
 function fallbackTemplateJson(label: string): Record<string, unknown> {
@@ -59,18 +63,13 @@ export function stitchScenes(scenes: SceneCode[], options?: StitchOptions): stri
     currentFrame += durationInFrames;
 
     const parsed = parseSceneJson(scene.code);
-    if (!parsed) {
-      return {
-        ...fallbackTemplateJson(`Scene ${scene.id}`),
-        durationInFrames,
-        fromFrame,
-      };
-    }
+    const base = parsed ?? fallbackTemplateJson(`Scene ${scene.id}`);
 
     return {
-      ...parsed,
+      ...base,
       durationInFrames,
       fromFrame,
+      ...(scene.voiceoverUrl ? { voiceoverUrl: scene.voiceoverUrl } : {}),
     };
   });
 
@@ -80,6 +79,9 @@ export function stitchScenes(scenes: SceneCode[], options?: StitchOptions): stri
   };
   if (options?.musicSrc?.trim()) {
     out.musicSrc = options.musicSrc.trim();
+  }
+  if (options?.duckMusicForVoiceover) {
+    out.duckMusicForVoiceover = true;
   }
   return JSON.stringify(out);
 }

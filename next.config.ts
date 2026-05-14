@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "playwright",
     "bullmq",
     "ioredis",
+    "sharp",
   ],
 };
 
