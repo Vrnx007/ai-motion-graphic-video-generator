@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth";
 import { extractFromUrl } from "@/lib/brand-extractor";
+import { captureBrandPage } from "@/lib/brand/playwright";
 import { db } from "@/lib/prisma";
 import { logApiError } from "@/lib/server-log";
 
@@ -28,7 +29,25 @@ export async function POST(req: Request) {
     }
 
     // Run the extraction pipeline
-    const brandData = await extractFromUrl(parsedUrl.href);
+    let brandData = await extractFromUrl(parsedUrl.href);
+
+    if (process.env.USE_PLAYWRIGHT_BRAND === "true") {
+      const snap = await captureBrandPage(parsedUrl.href);
+      if (snap?.h1Font || snap?.bodyFont) {
+        const pick = (s: string | null) =>
+          s
+            ?.split(",")[0]
+            ?.replace(/["']/g, "")
+            ?.trim() || undefined;
+        brandData = {
+          ...brandData,
+          fonts: {
+            heading: pick(snap.h1Font) || brandData.fonts.heading,
+            body: pick(snap.bodyFont) || brandData.fonts.body,
+          },
+        };
+      }
+    }
 
     // Save to database
     const brandKit = await db.brandKit.create({

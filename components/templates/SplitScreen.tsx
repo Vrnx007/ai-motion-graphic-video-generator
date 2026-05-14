@@ -25,11 +25,7 @@ export const SplitScreen: React.FC<SplitScreenProps> = ({
   const rightSpring = spring({ frame: frame - 6, fps, config: { damping: 18, stiffness: 80 } });
   const rightX = interpolate(rightSpring, [0, 1], [width * 0.5, 0]);
 
-  // Continuous image motion
-  const imgZoom = interpolate(frame, [0, durationInFrames], [1.15, 1.0], { extrapolateRight: "clamp" });
-  const imgRotate = interpolate(frame, [0, durationInFrames], [-1, 1]);
-
-  // Exit
+  // Keep screenshot fully visible — no zoom-out Ken Burns, no cover crop
   const exitStart = durationInFrames * 0.8;
   const exitProg = interpolate(frame, [exitStart, durationInFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
@@ -111,14 +107,19 @@ export const SplitScreen: React.FC<SplitScreenProps> = ({
         }}>
           {imageUrl ? (
             <div style={{
-              width: "88%", height: "78%", borderRadius: 24,
+              width: "92%", height: "85%", borderRadius: 24,
               overflow: "hidden", position: "relative",
               boxShadow: `0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px ${textColor}08`,
+              background: "#0f172a",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}>
               <Img src={imageUrl} style={{
-                width: "110%", height: "110%", objectFit: "cover",
-                marginLeft: "-5%", marginTop: "-5%",
-                transform: `scale(${imgZoom}) rotate(${imgRotate}deg)`,
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                objectPosition: "center center",
               }} />
               {/* Corner glow */}
               <div style={{

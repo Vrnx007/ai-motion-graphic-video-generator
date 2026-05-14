@@ -16,17 +16,12 @@ export const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({
   headline, subheadline, primaryColor, secondaryColor, backgroundColor, textColor, fontFamily, imageUrl,
 }) => {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames, width, height } = useVideoConfig();
+  const { fps, durationInFrames, width } = useVideoConfig();
   const secondary = secondaryColor || primaryColor;
 
-  // Continuous Ken Burns + pan
-  const kenBurns = interpolate(frame, [0, durationInFrames], [1.15, 1.0], { extrapolateRight: "clamp" });
-  const panX = interpolate(frame, [0, durationInFrames], [-2, 2]);
-  const panY = interpolate(frame, [0, durationInFrames], [-1, 1]);
-
-  // Image slide-up entrance
-  const imgSpring = spring({ frame: frame - 3, fps, config: { damping: 20, stiffness: 80 } });
-  const imgY = interpolate(imgSpring, [0, 1], [height * 0.08, 0]);
+  /** Keep product UI fully visible: no Ken Burns zoom-out, no cover crop. */
+  const settle = spring({ frame: frame - 2, fps, config: { damping: 22, stiffness: 120 } });
+  const imgOpacity = interpolate(settle, [0, 0.35, 1], [0, 0, 1]);
 
   // Text entrance
   const textSpring = spring({ frame: frame - 15, fps, config: { damping: 14, stiffness: 120 } });
@@ -35,31 +30,55 @@ export const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({
   const exitStart = durationInFrames * 0.8;
   const exitProg = interpolate(frame, [exitStart, durationInFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
-  // Spotlight sweep
-  const spotlightX = interpolate(frame, [0, durationInFrames], [-30, 130]);
-
   return (
     <AbsoluteFill style={{ backgroundColor, fontFamily: `'${fontFamily}', sans-serif`, overflow: "hidden" }}>
 
-      {/* Full-screen image with continuous motion */}
+      {/* Screenshot: contained, centered, no crop — optional tiny parallax only */}
       {imageUrl ? (
-        <AbsoluteFill style={{ transform: `translateY(${imgY}px)` }}>
-          <Img src={imageUrl} style={{
-            width: "115%", height: "115%", objectFit: "cover",
-            transform: `scale(${kenBurns}) translate(${panX}%, ${panY}%)`,
-            marginLeft: "-7.5%", marginTop: "-7.5%",
-          }} />
-          {/* Gradient overlays */}
-          <AbsoluteFill style={{
-            background: `linear-gradient(to top, ${backgroundColor} 0%, ${backgroundColor}aa 35%, transparent 70%, ${backgroundColor}44 100%)`,
-          }} />
-          {/* Moving spotlight */}
-          <div style={{
-            position: "absolute", left: `${spotlightX}%`, top: "0%",
-            width: "30%", height: "100%",
-            background: `linear-gradient(90deg, transparent, ${textColor}06, transparent)`,
-            transform: "skewX(-15deg)",
-          }} />
+        <AbsoluteFill
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-start",
+            paddingTop: "4%",
+            paddingBottom: "22%",
+            paddingLeft: "4%",
+            paddingRight: "4%",
+            opacity: imgOpacity,
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 20,
+              border: `1px solid ${textColor}12`,
+              boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
+              background: "#0f172a",
+              overflow: "hidden",
+            }}
+          >
+            <Img
+              src={imageUrl}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                objectPosition: "center center",
+                transform: `translate(${Math.sin(frame * 0.02) * 3}px, ${Math.cos(frame * 0.018) * 2}px)`,
+              }}
+            />
+          </div>
+          {/* Light bottom scrim for text legibility only */}
+          <AbsoluteFill
+            style={{
+              pointerEvents: "none",
+              background: `linear-gradient(to top, ${backgroundColor}f0 0%, ${backgroundColor}99 18%, transparent 42%)`,
+            }}
+          />
         </AbsoluteFill>
       ) : (
         /* Abstract visual when no image */
@@ -91,7 +110,7 @@ export const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({
         </AbsoluteFill>
       )}
 
-      {/* Particles */}
+      {/* Particles — stay behind text */}
       {Array.from({ length: 25 }).map((_, i) => {
         const seed = i * 9 + 50;
         const drift = interpolate(frame, [0, durationInFrames], [0, -60 - random(seed) * 60]);
@@ -103,6 +122,7 @@ export const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({
             borderRadius: "50%", backgroundColor: primaryColor,
             opacity: interpolate(frame, [0, 15, durationInFrames - 15, durationInFrames], [0, 0.2, 0.15, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
             transform: `translateY(${drift}px) translateX(${wobble}px)`,
+            zIndex: 2,
           }} />
         );
       })}
@@ -110,6 +130,7 @@ export const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({
       {/* Text at bottom — minimal, short */}
       <div style={{
         position: "absolute", bottom: "10%", left: "8%", right: "30%",
+        zIndex: 30,
         opacity: interpolate(textSpring, [0, 0.3, 1], [0, 0, 1]) * (1 - exitProg),
         transform: `translateY(${interpolate(textSpring, [0, 1], [30, 0]) + exitProg * -30}px)`,
       }}>

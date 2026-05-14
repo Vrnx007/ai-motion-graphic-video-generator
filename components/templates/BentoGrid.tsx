@@ -88,8 +88,8 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
           const opacity = interpolate(cellSpring, [0, 0.3, 1], [0, 0, 1]);
           const y = interpolate(cellSpring, [0, 1], [60, 0]);
 
-          // Image Ken Burns zoom
-          const imgScale = interpolate(frame, [0, durationInFrames], [1.15, 1.0], { extrapolateRight: "clamp" });
+          // Product thumbnails: show full frame inside cell (no Ken Burns crop)
+          const imgScale = 1;
 
           const gridColumn = i === 0 ? "span 2" : i === 3 ? "span 3" : "span 1";
           const gridRow = i === 0 ? "span 2" : "span 1";
@@ -113,13 +113,14 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               {cell.image && (
                 <AbsoluteFill>
                   <Img src={cell.image} style={{
-                    width: "100%", height: "100%", objectFit: "cover",
+                    width: "100%", height: "100%", objectFit: "contain",
+                    objectPosition: "center center",
                     transform: `scale(${imgScale})`,
                   }} />
-                  {/* Gradient overlay */}
+                  {/* Gradient overlay — keep top/mid of image readable */}
                   <div style={{
-                    position: "absolute", bottom: 0, left: 0, right: 0, height: "70%",
-                    background: `linear-gradient(to top, ${backgroundColor}ee, ${backgroundColor}88, transparent)`,
+                    position: "absolute", bottom: 0, left: 0, right: 0, height: "45%",
+                    background: `linear-gradient(to top, ${backgroundColor}dd, ${backgroundColor}55, transparent)`,
                   }} />
                 </AbsoluteFill>
               )}

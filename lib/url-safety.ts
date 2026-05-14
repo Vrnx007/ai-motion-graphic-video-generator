@@ -62,3 +62,51 @@ export function isUrlSafeForServerFetch(rawUrl: string): { ok: true; url: URL } 
   }
   return { ok: true, url };
 }
+
+const DEFAULT_MAX_REDIRECTS = 3;
+
+/**
+ * Follow redirects manually and re-validate each hop against SSRF rules.
+ * Use instead of fetch(..., { redirect: "follow" }) for untrusted URLs.
+ */
+export async function fetchWithRedirectSafety(
+  initialRawUrl: string,
+  init: RequestInit & { timeoutMs?: number; maxRedirects?: number } = {}
+): Promise<Response | null> {
+  const maxRedirects = init.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  let currentUrl = initialRawUrl;
+  const timeoutMs = init.timeoutMs ?? 12_000;
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const safe = isUrlSafeForServerFetch(currentUrl);
+    if (!safe.ok) return null;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(safe.url.toString(), {
+        ...init,
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
+    clearTimeout(timer);
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc || hop >= maxRedirects) return null;
+      try {
+        currentUrl = new URL(loc, safe.url).href;
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    return res;
+  }
+  return null;
+}

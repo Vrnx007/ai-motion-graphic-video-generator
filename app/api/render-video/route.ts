@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth";
-import { clientIpFromRequest, rateLimitHit } from "@/lib/rate-limit";
-import { signRenderWebhookBody } from "@/lib/render-webhook-sign";
+import { db } from "@/lib/prisma";
+import { clientIpFromRequest, rateLimitHitAsync } from "@/lib/rate-limit";
+import { enqueueRenderJob } from "@/lib/render-queue";
+import { processRenderJob } from "@/lib/render/process-job";
+import { logger } from "@/lib/logger";
+
+export const maxDuration = 60;
 
 /**
- * Headless Remotion render is not available on Vercel serverless (no Chromium).
- *
- * Optional: set REMOTION_RENDER_WEBHOOK_URL to a worker (Lambda, Modal, Fly, etc.)
- * that accepts POST JSON `{ videoCode, duration, aspectRatio, ... }` and returns
- * `{ downloadUrl: string }` or a binary video body.
- *
- * When REMOTION_RENDER_WEBHOOK_SECRET is set, requests include `X-Motion-Signature: hex(sha256Hmac(secret, rawBody))`.
+ * Enqueue Remotion render (BullMQ when REDIS_URL set) and process in background when Redis absent.
+ * Legacy synchronous webhook path removed — use RenderJob + status SSE.
  */
 export async function POST(req: Request) {
   const session = await getServerSession();
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
   }
 
   const ip = clientIpFromRequest(req);
-  const rl = rateLimitHit(`render-video:${ip}`, 40, 60 * 60 * 1000);
+  const rl = await rateLimitHitAsync(`render-video:${ip}`, 40, 60 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests" },
@@ -27,53 +28,37 @@ export async function POST(req: Request) {
     );
   }
 
-  const webhook = process.env.REMOTION_RENDER_WEBHOOK_URL?.trim();
-  const webhookSecret = process.env.REMOTION_RENDER_WEBHOOK_SECRET?.trim();
-
-  if (webhook) {
-    try {
-      const rawBody = await req.text();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (webhookSecret) {
-        headers["X-Motion-Signature"] = signRenderWebhookBody(webhookSecret, rawBody);
-      }
-      const res = await fetch(webhook, {
-        method: "POST",
-        headers,
-        body: rawBody,
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: text || `Render worker returned ${res.status}` },
-          { status: 502 }
-        );
-      }
-      try {
-        const json = JSON.parse(text);
-        if (json.downloadUrl) {
-          return NextResponse.json({ downloadUrl: json.downloadUrl, mode: "worker" });
-        }
-      } catch {
-        /* fall through if not JSON */
-      }
-      return new NextResponse(text, {
-        status: 200,
-        headers: { "Content-Type": res.headers.get("content-type") || "video/mp4" },
-      });
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Render webhook failed";
-      return NextResponse.json({ error: message }, { status: 502 });
-    }
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  return NextResponse.json(
-    {
-      mode: "client",
-      error:
-        "Server-side Remotion render is not configured. Export uses in-browser recording (WebM). " +
-        "Set REMOTION_RENDER_WEBHOOK_URL to your Remotion Lambda / worker URL for MP4 pipeline.",
+  const projectId = typeof body.projectId === "string" ? body.projectId : null;
+  const render4K = Boolean(body.render4K);
+  const stemsRequested = Boolean(body.stemsRequested);
+
+  const job = await db.renderJob.create({
+    data: {
+      userId: session.user.id,
+      projectId,
+      status: "queued",
+      renderInput: body as Prisma.InputJsonValue,
+      render4K,
+      stemsRequested,
+      costCents: 0,
     },
-    { status: 501 }
-  );
+  });
+
+  const queued = await enqueueRenderJob(job.id);
+  if (!queued) {
+    void processRenderJob(job.id).catch((e) => logger.error({ err: e, jobId: job.id }, "inline render failed"));
+  }
+
+  return NextResponse.json({
+    jobId: job.id,
+    status: job.status,
+    queue: queued ? "bullmq" : "inline",
+  });
 }

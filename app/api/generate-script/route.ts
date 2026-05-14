@@ -1,16 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import { validateScenePlan } from "@/lib/script-plan-validator";
+import { validateScenePlan, maxScreenshotHeavyScenes, minMotionFirstScenes } from "@/lib/script-plan-validator";
+import { getModelChain } from "@/lib/gemini-models";
 
 export const maxDuration = 120;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-const MODEL_CHAIN = ["gemini-3-flash-preview"];
-
-async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string> {
-  for (const modelName of MODEL_CHAIN) {
+async function generateWithRetry(modelNames: string[], prompt: string, maxRetries = 3): Promise<string> {
+  for (const modelName of modelNames) {
     const model = genAI.getGenerativeModel({ model: modelName });
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -102,6 +101,9 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
 `;
     }
 
+    const maxHeavy = maxScreenshotHeavyScenes(sceneCount);
+    const minMotion = minMotionFirstScenes(sceneCount);
+
     const systemPrompt = [
       "You are an elite creative director and SaaS launch filmmaker.",
       "You generate CINEMATIC scene plans for premium product showcase videos.",
@@ -130,6 +132,11 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       `TARGET DURATION: EXACTLY ${targetDuration} seconds`,
       `REQUIRED SCENES: EXACTLY ${sceneCount} scenes`,
       `AVERAGE PER SCENE: ${Math.round(targetDuration / sceneCount)} seconds`,
+      "",
+      `SCREENSHOT-FIRST BUDGET: At most ${maxHeavy} scene(s) may use "FeatureShowcase" or "DemoBrowserWalkthrough" combined (full-bleed or framed UI).`,
+      `MOTION-FIRST FLOOR: At least ${minMotion} scene(s) MUST use "KineticHero", "ProductOrbit3D", "StatCounter", "OrbFieldHero", "GlyphRhythm", or "LogoReveal" (no product screenshot as hero).`,
+      "",
+      "ON-SCREEN TEXT: each scene `text` field MAX 14 WORDS (billboard). Put detail in `visual` (motion choreography), not in `text`.",
       "",
       `THE SUM OF ALL SCENE DURATIONS MUST EQUAL EXACTLY ${targetDuration} SECONDS.`,
       "",
@@ -227,10 +234,14 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       "",
       '"KineticHero" — Bold kinetic typography, staggered word reveals. Best for: hook, intro, CTA.',
       '"BentoGrid" — Apple-style grid layout, 3-4 feature cards. Best for: features, demo.',
-      '"FeatureShowcase" — Full-screen hero image with text overlay. Best for: demo, solution.',
-      '"SplitScreen" — Left text / right image with slide-in. Best for: problem, solution.',
+      '"FeatureShowcase" — Full-screen hero image. ONLY for demo/solution/features scenes — never for hook/problem/cta.',
+      '"SplitScreen" — Left text / right image. Best for: problem, solution.',
       '"StatCounter" — Animated number counters. Best for: social-proof, metrics.',
       '"LogoReveal" — Cinematic logo entrance. Best for: intro, outro, CTA.',
+      '"ProductOrbit3D" — WebGL 3D slab, no screenshot. Best for: premium beats, hook, wow moments.',
+      '"DemoBrowserWalkthrough" — Browser chrome + cursor on screenshot. Best for: UI tour — use sparingly (counts toward screenshot budget).',
+      '"OrbFieldHero" — Pure gradient/orb motion, no screenshot. Best for: hook, abstract beats.',
+      '"GlyphRhythm" — EQ bars + particles, no screenshot. Best for: interludes, tech pulse.',
       '"IntegrationShowcase" — Horizontal partner / integration logos with staggered motion. Best for: proof, ecosystem, trust strip.',
       '"TestimonialSpotlight" — Quote card with author, subtle parallax, glow frame. Best for: social-proof, testimonial.',
       '"ComparisonSplit" — Before/after or us-vs-them split with kinetic divider. Best for: problem, differentiation.',
@@ -242,12 +253,12 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       "════════════════════════════════════════",
       "",
       "1. Output ONLY valid JSON — no markdown, no explanation.",
-      "2. Each scene: id (number), type, duration (seconds), title, text (on-screen copy), visual (DETAILED motion direction), templateName",
-      "3. DISTRIBUTE brand images across scenes — every visual scene should have imageUrl",
+      "2. Each scene: id (number), type, duration (seconds), title, text (on-screen copy, MAX 14 WORDS), visual (DETAILED motion direction), templateName",
+      "3. imageUrl is OPTIONAL — when set, it MUST be a curated UI/screenshot for THIS scene; pair with template: demo→DemoBrowserWalkthrough or FeatureShowcase; solution/features→FeatureShowcase or BentoGrid images[]; problem→SplitScreen; never use a full UI capture as KineticHero background.",
       "4. Use the brand's ACTUAL headlines, features, CTA — NOT generic copy",
       `5. SUM of durations MUST EQUAL EXACTLY ${targetDuration} seconds`,
       `6. EXACTLY ${sceneCount} scenes`,
-      "7. TEXT in each scene: MAX 5-7 WORDS. Think billboard, not paragraph.",
+      "7. TEXT in each scene: MAX 14 WORDS in the `text` field (billboard).",
       "8. VARY templateName across scenes — never use the same template for more than 2 consecutive scenes",
       "",
 
@@ -255,7 +266,7 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       "OUTPUT FORMAT:",
       "{",
       '  "scenes": [',
-      `    { "id": 1, "type": "hook", "duration": ${Math.round(targetDuration / sceneCount)}, "title": "...", "text": "...", "visual": "DETAILED motion direction...", "imageUrl": "...", "templateName": "KineticHero" },`,
+      `    { "id": 1, "type": "hook", "duration": ${Math.round(targetDuration / sceneCount)}, "title": "...", "text": "max 14 words", "visual": "DETAILED motion direction...", "templateName": "OrbFieldHero" },`,
       `    ...${sceneCount} scenes total...`,
       "  ],",
       `  "totalDuration": ${targetDuration},`,
@@ -263,7 +274,7 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
       "}",
     ].join("\n");
 
-    let text = await generateWithRetry(systemPrompt);
+    let text = await generateWithRetry(getModelChain("script"), systemPrompt);
 
     // Clean up Gemini output
     text = text
@@ -336,7 +347,7 @@ ${images.length ? images.map((img: { url: string; alt?: string; context?: string
         JSON.stringify(scenePlan),
       ].join("\n");
 
-      let repairRaw = await generateWithRetry(repairPrompt);
+      let repairRaw = await generateWithRetry(getModelChain("script"), repairPrompt);
       repairRaw = repairRaw
         .replace(/^```(?:json)?\s*\n?/gim, "")
         .replace(/\n?```\s*$/gim, "")

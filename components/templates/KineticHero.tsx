@@ -53,9 +53,8 @@ export const KineticHero: React.FC<KineticHeroProps> = ({
   const orbY = interpolate(frame, [0, durationInFrames], [30, 50]);
   const orb2X = interpolate(frame, [0, durationInFrames], [70, 30]);
 
-  // Image continuous zoom
-  const imgZoom = interpolate(frame, [0, durationInFrames], [1.2, 1.0], { extrapolateRight: "clamp" });
-  const imgPanX = interpolate(frame, [0, durationInFrames], [-3, 3]);
+  // Optional mood background: never crop — contain + stable scale (not a hero product shot)
+  const imgBgOpacity = interpolate(frame, [0, 20], [0, 0.35], { extrapolateRight: "clamp" });
 
   // Text exit animation (last 20% of duration)
   const exitStart = durationInFrames * 0.75;
@@ -80,11 +79,11 @@ export const KineticHero: React.FC<KineticHeroProps> = ({
 
       {/* Background image — continuously panning */}
       {imageUrl && (
-        <AbsoluteFill>
+        <AbsoluteFill style={{ opacity: imgBgOpacity }}>
           <Img src={imageUrl} style={{
-            width: "110%", height: "110%", objectFit: "cover",
-            transform: `scale(${imgZoom}) translateX(${imgPanX}%)`,
-            filter: "brightness(0.25) saturate(1.3)",
+            width: "100%", height: "100%", objectFit: "contain",
+            objectPosition: "center center",
+            filter: "brightness(0.35) saturate(1.1)",
           }} />
           <AbsoluteFill style={{
             background: `linear-gradient(135deg, ${backgroundColor}dd 0%, transparent 50%, ${backgroundColor}cc 100%)`

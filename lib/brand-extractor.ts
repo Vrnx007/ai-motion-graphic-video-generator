@@ -24,7 +24,7 @@ import {
   findFirstUsableColor,
   rgbSaturation,
 } from "./color-utils";
-import { isUrlSafeForServerFetch } from "./url-safety";
+import { fetchWithRedirectSafety, isUrlSafeForServerFetch } from "./url-safety";
 
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -113,13 +113,13 @@ async function safeFetch(
   try {
     const safe = isUrlSafeForServerFetch(url);
     if (!safe.ok) return null;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeout ?? FETCH_TIMEOUT);
     const headers: Record<string, string> = { "User-Agent": CHROME_UA };
     if (opts.acceptImage) headers["Accept"] = "image/*";
-    const res = await fetch(safe.url.toString(), { signal: controller.signal, headers, redirect: "follow" });
-    clearTimeout(timer);
-    if (!res.ok) return null;
+    const res = await fetchWithRedirectSafety(url, {
+      headers,
+      timeoutMs: opts.timeout ?? FETCH_TIMEOUT,
+    });
+    if (!res || !res.ok) return null;
     return res;
   } catch {
     return null;

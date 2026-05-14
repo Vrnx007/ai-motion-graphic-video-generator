@@ -7,6 +7,7 @@ import BrandPreview from "@/components/BrandPreview";
 import { BrandImagePicker } from "@/components/BrandImagePicker";
 import SceneTimeline, { Scene } from "@/components/SceneTimeline";
 import { stitchScenes, SceneCode } from "@/lib/scene-stitcher";
+import { isValidGodTemplateJsonString } from "@/lib/god-template-validator";
 import { resolveBackgroundTrack } from "@/lib/music-tracks";
 import { recordRemotionPreviewToWebm, projectDurationSeconds } from "@/lib/record-player-webm";
 import {
@@ -15,9 +16,19 @@ import {
   Upload, Image, Palette, Copy, Zap, Crown, Rocket, Minimize2,
   Flame, Laptop, Target, Shuffle, Layout,
 } from "lucide-react";
-import * as Babel from "@babel/standalone";
 import Link from "next/link";
 import { motion } from "framer-motion";
+
+function fallbackSceneJson(label: string): string {
+  return JSON.stringify({
+    type: "template",
+    templateName: "KineticHero",
+    props: {
+      headline: String(label || "Scene").slice(0, 28),
+      subheadline: "Regenerate this scene — Motion AI now uses JSON God templates only.",
+    },
+  });
+}
 
 const VIDEO_TYPES = [
   { id: "product-launch", label: "Launch", icon: Rocket },
@@ -50,6 +61,8 @@ const GOD_TEMPLATE_IDS = [
   "IntegrationShowcase",
   "TestimonialSpotlight",
   "ComparisonSplit",
+  "OrbFieldHero",
+  "GlyphRhythm",
 ] as const;
 
 const PLATFORM_PRESETS = [
@@ -325,7 +338,7 @@ export default function GenerateClient() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
+            prompt: `[Scene type: ${scene.type}] ${scene.title}: ${scene.text}. Visual: ${scene.visual}${scene.imageUrl ? ` Curated image for this scene: yes (use in template props).` : ""}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
             duration: scene.duration,
             aspectVideo: aspectRatio,
             brandKit,
@@ -336,23 +349,17 @@ export default function GenerateClient() {
         if (!res.ok) throw new Error(data.error);
         
         const safeCode = cleanAiCode(data.videoCode);
-        
-        let isValid = true;
-        if (safeCode.trim().startsWith("{")) {
-          try { JSON.parse(safeCode); } catch(e) { isValid = false; }
-        } else {
-          try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
-          catch(e) { isValid = false; }
-        }
-        
-        if (!isValid) throw new Error("AI code was truncated or invalid.");
-        
+
+        const isValid = isValidGodTemplateJsonString(safeCode);
+
+        if (!isValid) throw new Error("AI code was truncated or invalid JSON template.");
+
         collected.push({ id: scene.id, code: safeCode, duration: scene.duration });
       } catch (err: any) {
         console.error(`Scene ${scene.id} failed:`, err);
         collected.push({
           id: scene.id,
-          code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
+          code: fallbackSceneJson(scene.text),
           duration: scene.duration,
         });
       }
@@ -408,7 +415,7 @@ export default function GenerateClient() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
+              prompt: `[Scene type: ${scene.type}] ${scene.title}: ${scene.text}. Visual: ${scene.visual}${scene.imageUrl ? ` Curated image for this scene: yes (use in template props).` : ""}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ''}`,
               duration: scene.duration,
               aspectVideo: aspectRatio,
               brandKit,
@@ -419,18 +426,12 @@ export default function GenerateClient() {
           if (!res.ok) throw new Error(data.error);
           
           const safeCode = cleanAiCode(data.videoCode);
-          let isValid = true;
-          if (safeCode.trim().startsWith("{")) {
-            try { JSON.parse(safeCode); } catch(e) { isValid = false; }
-          } else {
-            try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
-            catch(e) { isValid = false; }
-          }
+          const isValid = isValidGodTemplateJsonString(safeCode);
           if (!isValid) {
             console.warn(`Quick generate scene ${scene.id} truncated, using fallback`);
             collected.push({
               id: scene.id,
-              code: `const MyComposition = () => { return (<AbsoluteFill style={{background:'#FFFFFF',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#1e293b',fontSize:40,fontWeight:'bold'}}>${scene.text}</div></AbsoluteFill>); };`,
+              code: fallbackSceneJson(scene.text),
               duration: scene.duration,
             });
           } else {
@@ -458,15 +459,9 @@ export default function GenerateClient() {
         if (!res.ok) throw new Error(data.error);
         
         const safeCode = cleanAiCode(data.videoCode);
-        
-        let isValid = true;
-        if (safeCode.trim().startsWith("{")) {
-          try { JSON.parse(safeCode); } catch(e) { isValid = false; }
-        } else {
-          try { Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" }); } 
-          catch(e) { isValid = false; }
-        }
-        
+
+        const isValid = isValidGodTemplateJsonString(safeCode);
+
         if (!isValid) throw new Error("The AI generated incomplete code due to length limits. Please try again or use a longer duration to enable scene-based generation.");
         
         setVideoCode(safeCode);
@@ -630,6 +625,60 @@ export default function GenerateClient() {
       setVideoCode(stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) }));
     }
   };
+
+  const handleReorderScenes = (next: Scene[]) => {
+    setScenes(next);
+    if (!sceneCodes.length) return;
+    const ordered = next
+      .map((s) => sceneCodes.find((c) => c.id === s.id))
+      .filter((c): c is SceneCode => Boolean(c));
+    if (ordered.length !== next.length) return;
+    setSceneCodes(ordered);
+    if (step === "preview") {
+      setVideoCode(stitchScenes(ordered, { musicSrc: resolveBackgroundTrack(musicMood) }));
+    }
+  };
+
+  const handleSplitScene = (id: number) => {
+    const idx = scenes.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    const s = scenes[idx];
+    if (s.duration < 6) return;
+    const d1 = Math.max(3, Math.floor(s.duration / 2));
+    const d2 = Math.max(3, s.duration - d1);
+    const newId = Math.max(0, ...scenes.map((x) => x.id)) + 1;
+    const first: Scene = {
+      ...s,
+      duration: d1,
+      title: `${s.title} (1/2)`,
+    };
+    const second: Scene = {
+      ...s,
+      id: newId,
+      duration: d2,
+      title: `${s.title} (2/2)`,
+    };
+    const ns = [...scenes.slice(0, idx), first, second, ...scenes.slice(idx + 1)];
+    setScenes(ns);
+
+    const codeIdx = sceneCodes.findIndex((c) => c.id === id);
+    const c = codeIdx >= 0 ? sceneCodes[codeIdx] : null;
+    const nc =
+      codeIdx >= 0 && c
+        ? [
+            ...sceneCodes.slice(0, codeIdx),
+            { id, code: c.code, duration: d1 },
+            { id: newId, code: c.code, duration: d2 },
+            ...sceneCodes.slice(codeIdx + 1),
+          ]
+        : sceneCodes;
+    setSceneCodes(nc);
+    if (step === "preview" && nc.length) {
+      setVideoCode(stitchScenes(nc, { musicSrc: resolveBackgroundTrack(musicMood) }));
+    }
+    setActiveSceneId(newId);
+  };
+
   const handleRegenerateScene = async (id: number) => {
     const scene = scenes.find((s) => s.id === id);
     if (!scene) return;
@@ -650,7 +699,7 @@ export default function GenerateClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: `${scene.title}: ${scene.text}. Visual: ${scene.visual}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ""}`,
+          prompt: `[Scene type: ${scene.type}] ${scene.title}: ${scene.text}. Visual: ${scene.visual}${scene.imageUrl ? ` Curated image for this scene: yes (use in template props).` : ""}${dirStyle ? `. STYLE: ${dirStyle.prompt}` : ""}`,
           duration: scene.duration,
           aspectVideo: aspectRatio,
           brandKit,
@@ -660,20 +709,7 @@ export default function GenerateClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       const safeCode = cleanAiCode(data.videoCode);
-      let isValid = true;
-      if (safeCode.trim().startsWith("{")) {
-        try {
-          JSON.parse(safeCode);
-        } catch {
-          isValid = false;
-        }
-      } else {
-        try {
-          Babel.transform(safeCode, { presets: ["env", "react", "typescript"], filename: "composition.tsx" });
-        } catch {
-          isValid = false;
-        }
-      }
+      const isValid = isValidGodTemplateJsonString(safeCode);
       if (!isValid) throw new Error("Invalid AI output");
       const nc = sceneCodes.map((c) =>
         c.id === id ? { ...c, code: safeCode, duration: scene.duration } : c
@@ -930,13 +966,14 @@ export default function GenerateClient() {
               scenes={scenes}
               activeSceneId={activeSceneId}
               onSelectScene={setActiveSceneId}
-              onUpdateScene={handleUpdateScene}
               onDeleteScene={handleDeleteScene}
               onRegenerateScene={handleRegenerateScene}
-              onReorderScenes={setScenes}
+              onReorderScenes={handleReorderScenes}
               generatingSceneId={generatingSceneId}
-              hideSegmentBar={step === "preview"}
+              hideSegmentBar={false}
               onMoveScene={moveScene}
+              onSeekToFrame={(frame) => videoPreviewRef.current?.seekToFrame(frame)}
+              onSplitScene={handleSplitScene}
             />
           )}
 
@@ -1117,7 +1154,7 @@ export default function GenerateClient() {
               code={videoCode}
               duration={scenes.length > 0 ? totalSceneDuration : duration}
               aspectRatio={aspectRatio}
-              variant={step === "preview" ? "clean" : "editor"}
+              variant="editor"
               musicSrc={resolveBackgroundTrack(musicMood)}
             />
           </motion.div>

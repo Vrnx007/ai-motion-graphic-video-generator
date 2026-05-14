@@ -1,5 +1,5 @@
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -15,10 +15,11 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions  Session[]
-  accounts  Account[]
-  projects  Project[]
-  brandKits BrandKit[]
+  sessions   Session[]
+  accounts   Account[]
+  projects   Project[]
+  brandKits  BrandKit[]
+  renderJobs RenderJob[]
 
   @@map("user")
 }
@@ -34,8 +35,8 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("session")
   @@index([userId])
+  @@map("session")
 }
 
 model Account {
@@ -55,8 +56,8 @@ model Account {
   updatedAt             DateTime  @updatedAt
 
   @@unique([providerId, accountId])
-  @@map("account")
   @@index([userId])
+  @@map("account")
 }
 
 model Verification {
@@ -68,66 +69,208 @@ model Verification {
   updatedAt  DateTime? @updatedAt
 
   @@unique([identifier, value])
-  @@map("verification")
   @@index([identifier])
+  @@map("verification")
 }
 
 model Project {
-  id          String    @id @default(cuid())
-  /** Opaque token for public share URLs (never use raw project id in public links). */
-  shareToken  String    @unique @default(cuid())
-  prompt      String    @default("Untitled Animation")
-  videoCode   String
-  duration    Int       @default(10)
-  aspectRatio String    @default("16:9")
-  videoType   String    @default("general")
-  scenes      Json?
-  musicMood   String?
-  downloadUrl String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  brandKitId  String?
-  brandKit    BrandKit? @relation(fields: [brandKitId], references: [id])
+  id           String           @id @default(cuid())
+  /**
+   * Opaque token for public share URLs (never use raw project id in public links).
+   */
+  shareToken   String           @unique @default(cuid())
+  prompt       String           @default("Untitled Animation")
+  videoCode    String
+  duration     Int              @default(10)
+  aspectRatio  String           @default("16:9")
+  videoType    String           @default("general")
+  scenes       Json?
+  musicMood    String?
+  downloadUrl  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brandKitId   String?
+  brandKit     BrandKit?        @relation(fields: [brandKitId], references: [id])
+  renderJobs   RenderJob[]
+  deliverables Deliverable[]
+  versions     ProjectVersion[]
 
-  @@map("project")
   @@index([userId])
+  @@map("project")
 }
 
 model BrandKit {
-  id            String   @id @default(cuid())
-  name          String   @default("My Brand")
-  sourceUrl     String?
+  id        String  @id @default(cuid())
+  name      String  @default("My Brand")
+  sourceUrl String?
 
   // Visual identity
-  logoUrl       String?
-  colors        Json     // { primary, secondary, accent, background, text }
-  brandPalette  Json?    // string[] up to 8 colors
-  fonts         Json?    // { heading, body }
+  logoUrl      String?
+  colors       Json // { primary, secondary, accent, background, text }
+  brandPalette Json? // string[] up to 8 colors
+  fonts        Json? // { heading, body }
 
   // Content extracted
-  headline      String?
-  subheadline   String?
-  features      Json?    // [{ title, description }]
-  cta           String?
-  tone          String?
-  style         String?
+  headline    String?
+  subheadline String?
+  features    Json? // [{ title, description }]
+  cta         String?
+  tone        String?
+  style       String?
 
   // Images from site
-  images        Json?    // [{ url, alt, context }]
+  images Json? // [{ url, alt, context }]
 
-  testimonials  Json?    // [{ quote, author, role }]
-  integrations  Json?    // [{ name, logoUrl }]
-  pricingCues     Json?    // string[] or { label, detail }[]
+  testimonials Json? // [{ quote, author, role }]
+  integrations Json? // [{ name, logoUrl }]
+  pricingCues  Json? // string[] or { label, detail }[]
 
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects      Project[]
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects   Project[]
+  brandBible BrandBible?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@map("brand_kit")
   @@index([userId])
+  @@map("brand_kit")
+}
+
+model RenderJob {
+  id             String   @id @default(cuid())
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String   @default("queued")
+  progress       Int      @default(0)
+  outputUrl      String?
+  costCents      Int      @default(0)
+  spendBreakdown Json?
+  renderInput    Json?
+  error          String?
+  directorState  Json?
+  render4K       Boolean  @default(false)
+  stemsRequested Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@map("render_job")
+}
+
+model BrandVoice {
+  id        String   @id @default(cuid())
+  name      String
+  provider  String
+  voiceId   String
+  sampleUrl String?
+  vibeTags  String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("brand_voice")
+}
+
+model BrandBible {
+  id                String    @id @default(cuid())
+  brandKitId        String?   @unique
+  brandKit          BrandKit? @relation(fields: [brandKitId], references: [id], onDelete: SetNull)
+  industry          String?
+  motionVocabulary  String?
+  typographyPairing String?
+  colorRoles        Json?
+  doNots            String?
+  visualLanguage    String    @default("glass_orb")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("brand_bible")
+}
+
+model OpsUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  totpSecret   String?
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ops_user")
+}
+
+model Client {
+  id            String        @id @default(cuid())
+  name          String
+  contactEmail  String
+  billingHandle String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deliverables  Deliverable[]
+
+  @@map("client")
+}
+
+model Deliverable {
+  id         String             @id @default(cuid())
+  clientId   String
+  client     Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId  String?
+  project    Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status     String             @default("draft")
+  priceCents Int                @default(100000)
+  dueAt      DateTime?
+  sla        String?
+  revisions  Revision[]
+  events     DeliverableEvent[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([clientId])
+  @@map("deliverable")
+}
+
+model Revision {
+  id            String      @id @default(cuid())
+  deliverableId String
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  requestedBy   String
+  notes         String
+  status        String      @default("open")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([deliverableId])
+  @@map("revision")
+}
+
+model DeliverableEvent {
+  id            String      @id @default(cuid())
+  deliverableId String
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  kind          String
+  payload       Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([deliverableId])
+  @@map("deliverable_event")
+}
+
+model ProjectVersion {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String
+  videoUrl  String?
+  bundleUrl String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@map("project_version")
 }

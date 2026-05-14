@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/prisma";
-import { clientIpFromRequest, rateLimitHit } from "@/lib/rate-limit";
-import { IMAGE_PROXY_MAX_BYTES, isUrlSafeForServerFetch } from "@/lib/url-safety";
+import { clientIpFromRequest, rateLimitHitAsync } from "@/lib/rate-limit";
+import { fetchWithRedirectSafety, IMAGE_PROXY_MAX_BYTES, isUrlSafeForServerFetch } from "@/lib/url-safety";
 
 export const maxDuration = 30;
 
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
       });
       authorized = !!project;
       if (authorized) {
-        const rl = rateLimitHit(`image-proxy-share:${shareToken}`, 400, 60 * 60 * 1000);
+        const rl = await rateLimitHitAsync(`image-proxy-share:${shareToken}`, 400, 60 * 60 * 1000);
         if (!rl.allowed) {
           return NextResponse.json(
             { error: "Too many requests" },
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     }
 
     const ip = clientIpFromRequest(req);
-    const rl = rateLimitHit(`image-proxy:${ip}`, 200, 60 * 60 * 1000);
+    const rl = await rateLimitHitAsync(`image-proxy:${ip}`, 200, 60 * 60 * 1000);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
@@ -59,18 +59,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: safe.reason }, { status: 400 });
     }
 
-    const response = await fetch(safe.url.toString(), {
+    const response = await fetchWithRedirectSafety(imageUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Accept: "image/*,*/*",
       },
-      signal: AbortSignal.timeout(10000),
-      redirect: "follow",
+      timeoutMs: 10_000,
     });
 
-    if (!response.ok) {
-      return NextResponse.json({ error: `Upstream returned ${response.status}` }, { status: 502 });
+    if (!response || !response.ok) {
+      return NextResponse.json(
+        { error: response ? `Upstream returned ${response.status}` : "Upstream fetch failed" },
+        { status: 502 }
+      );
     }
 
     const contentLength = response.headers.get("content-length");

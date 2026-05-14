@@ -1,5 +1,5 @@
 /**
- * Structured server logs (no third-party dependency). Optional Sentry when SDK supports Next 16.
+ * Structured server logs (stdout JSON lines only — no third-party observability SDKs).
  */
 export function logApiError(
   route: string,

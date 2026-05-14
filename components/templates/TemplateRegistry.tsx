@@ -12,6 +12,8 @@ import { LottieOverlay } from "./LottieOverlay";
 import { IntegrationShowcase } from "./IntegrationShowcase";
 import { TestimonialSpotlight } from "./TestimonialSpotlight";
 import { ComparisonSplit } from "./ComparisonSplit";
+import { OrbFieldHero } from "./OrbFieldHero";
+import { GlyphRhythm } from "./GlyphRhythm";
 
 export interface TemplateProps {
   templateName: string;
@@ -44,6 +46,10 @@ export const TemplateRegistry: React.FC<TemplateProps> = ({ templateName, props 
       return <TestimonialSpotlight {...props} />;
     case "ComparisonSplit":
       return <ComparisonSplit {...props} />;
+    case "OrbFieldHero":
+      return <OrbFieldHero {...props} />;
+    case "GlyphRhythm":
+      return <GlyphRhythm {...props} />;
     default:
       // Fallback — render as KineticHero since it handles all basic props
       return <KineticHero {...props} />;

@@ -12,6 +12,7 @@ import { injectShareTokenInVideoCode } from "@/lib/share-code";
 export default function SharePage() {
   const params = useParams();
   const shareToken = typeof params?.shareToken === "string" ? params.shareToken : "";
+  const [clientTitle, setClientTitle] = useState("Motion.AI");
   const [project, setProject] = useState<{
     id: string;
     shareToken: string;
@@ -24,7 +25,14 @@ export default function SharePage() {
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [revisionStatus, setRevisionStatus] = useState<string | null>(null);
   const previewRef = useRef<VideoPreviewHandle | null>(null);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("client")?.trim();
+    if (q) setClientTitle(q);
+  }, []);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -51,6 +59,29 @@ export default function SharePage() {
     if (!project?.videoCode || !project.shareToken) return "";
     return injectShareTokenInVideoCode(project.videoCode, project.shareToken);
   }, [project]);
+
+  const handleRequestRevision = async () => {
+    if (!shareToken) return;
+    setRevisionStatus("Sending…");
+    try {
+      const res = await fetch("/api/share-revision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shareToken,
+          notes: revisionNotes,
+          requestedBy: "client@share",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setRevisionStatus("Revision requested. Our team will respond shortly.");
+      setRevisionNotes("");
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "Error";
+      setRevisionStatus(m);
+    }
+  };
 
   const handleDownload = async () => {
     if (!project) return;
@@ -110,7 +141,13 @@ export default function SharePage() {
           <Play className="text-white w-5 h-5 fill-current" />
         </div>
         <h1 className="text-2xl font-black italic tracking-tighter text-white">
-          Motion<span className="text-blue-500">AI</span>
+          {clientTitle === "Motion.AI" ? (
+            <>
+              Motion<span className="text-blue-500">AI</span>
+            </>
+          ) : (
+            <span>{clientTitle}</span>
+          )}
         </h1>
       </div>
 
@@ -158,6 +195,29 @@ export default function SharePage() {
             </div>
           </div>
         )}
+
+        <div className="mt-8 w-full max-w-lg space-y-3 text-left">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Request a revision
+          </label>
+          <textarea
+            value={revisionNotes}
+            onChange={(e) => setRevisionNotes(e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border border-white/10 bg-slate-950/80 p-3 text-sm text-white outline-none focus:border-blue-500/40"
+            placeholder="Timecoded feedback, copy tweaks, pacing…"
+          />
+          <button
+            type="button"
+            onClick={handleRequestRevision}
+            className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-black uppercase tracking-widest"
+          >
+            Submit revision request
+          </button>
+          {revisionStatus ? (
+            <p className="text-[11px] text-slate-400">{revisionStatus}</p>
+          ) : null}
+        </div>
 
         <Link
           href={`/signin?next=${encodeURIComponent(`/dashboard/generate?resume=${project.id}`)}`}

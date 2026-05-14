@@ -15,17 +15,37 @@ export function DemoBrowserWalkthrough({
   headline = "See it in action",
   subheadline = "",
   imageUrl = "",
+  cursorKeyframes,
 }: {
   headline?: string;
   subheadline?: string;
   imageUrl?: string;
+  /** Optional normalized path (0–1 of inner browser width/height). When set, overrides default hard-coded cursor. */
+  cursorKeyframes?: { frame: number; xRatio: number; yRatio: number }[];
 }) {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
   const pad = spring({ frame, fps, from: 0, to: 1, durationInFrames: 18 });
 
-  const cx = interpolate(frame, [0, 40, 90, 140], [width * 0.22, width * 0.62, width * 0.55, width * 0.35]);
-  const cy = interpolate(frame, [0, 40, 90, 140], [280, 220, 380, 320]);
+  const cx =
+    cursorKeyframes && cursorKeyframes.length >= 2
+      ? interpolate(
+          frame,
+          cursorKeyframes.map((k) => k.frame),
+          cursorKeyframes.map((k) => k.xRatio * width),
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        )
+      : interpolate(frame, [0, 40, 90, 140], [width * 0.22, width * 0.62, width * 0.55, width * 0.35]);
+
+  const cy =
+    cursorKeyframes && cursorKeyframes.length >= 2
+      ? interpolate(
+          frame,
+          cursorKeyframes.map((k) => k.frame),
+          cursorKeyframes.map((k) => k.yRatio * width),
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        )
+      : interpolate(frame, [0, 40, 90, 140], [280, 220, 380, 320]);
   const clickPulse = spring({
     frame: frame - 55,
     fps,
@@ -101,9 +121,9 @@ export function DemoBrowserWalkthrough({
               style={{
                 width: "100%",
                 height: "100%",
-                objectFit: "cover",
+                objectFit: "contain",
+                objectPosition: "center center",
                 opacity: interpolate(frame, [8, 28], [0, 1], { extrapolateRight: "clamp" }),
-                transform: `scale(${interpolate(frame, [8, 40], [0.96, 1], { extrapolateRight: "clamp" })})`,
               }}
             />
           ) : (

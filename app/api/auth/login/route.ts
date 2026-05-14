@@ -1,25 +1,67 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import argon2 from "argon2";
+import { authenticator } from "otplib";
 import { db } from "@/lib/prisma";
 import { signSessionToken, SESSION_COOKIE, timingSafeStringEqual } from "@/lib/session";
 
 export async function POST(req: Request) {
   try {
     const emailEnv = process.env.APP_LOGIN_EMAIL?.trim().toLowerCase();
-    const passwordEnv = process.env.APP_LOGIN_PASSWORD ?? "";
-    if (!emailEnv || !passwordEnv) {
+    const passwordHashEnv = process.env.APP_LOGIN_PASSWORD_HASH?.trim();
+    const passwordPlainEnv = process.env.APP_LOGIN_PASSWORD ?? "";
+    const totpSecret = process.env.APP_LOGIN_TOTP_SECRET?.trim();
+
+    if (!emailEnv) {
       return NextResponse.json(
-        { error: "Server login is not configured. Set APP_LOGIN_EMAIL and APP_LOGIN_PASSWORD." },
-        { status: 500 },
+        { error: "Server login is not configured. Set APP_LOGIN_EMAIL." },
+        { status: 500 }
+      );
+    }
+
+    if (!passwordHashEnv && !passwordPlainEnv) {
+      return NextResponse.json(
+        {
+          error:
+            "Set APP_LOGIN_PASSWORD_HASH (argon2id hash) for production, or legacy APP_LOGIN_PASSWORD for local dev.",
+        },
+        { status: 500 }
       );
     }
 
     const body = await req.json().catch(() => null);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body?.password === "string" ? body.password : "";
+    const totp = typeof body?.totp === "string" ? body.totp.replace(/\s/g, "") : "";
 
-    if (!timingSafeStringEqual(email, emailEnv) || !timingSafeStringEqual(password, passwordEnv)) {
+    if (!timingSafeStringEqual(email, emailEnv)) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    let passwordOk = false;
+    if (passwordHashEnv) {
+      try {
+        passwordOk = await argon2.verify(passwordHashEnv, password);
+      } catch {
+        passwordOk = false;
+      }
+    } else {
+      passwordOk = timingSafeStringEqual(password, passwordPlainEnv);
+    }
+
+    if (!passwordOk) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    if (totpSecret) {
+      authenticator.options = { window: 1 };
+      if (!totp || !authenticator.check(totp, totpSecret)) {
+        return NextResponse.json({ error: "Invalid or missing two-factor code" }, { status: 401 });
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      console.warn(
+        "[login] APP_LOGIN_TOTP_SECRET is not set — two-factor authentication is disabled (not recommended)."
+      );
     }
 
     const displayName = process.env.APP_USER_NAME?.trim() || "Owner";
