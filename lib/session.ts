@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 export const SESSION_COOKIE = "motion_ai_session";
 
-/** OWASP-style minimum for HMAC session secrets */
-const MIN_SECRET_LEN = 48;
+/** Minimum length for cookie signing secret */
+const MIN_SECRET_LEN = 16;
 
 function getSecret(): string | null {
   const s = process.env.SESSION_SECRET?.trim();
@@ -14,7 +14,7 @@ function getSecret(): string | null {
 export function signSessionToken(userId: string): string {
   const secret = getSecret();
   if (!secret) {
-    throw new Error("SESSION_SECRET must be set (at least 48 characters)");
+    throw new Error("SESSION_SECRET must be set (at least 16 characters)");
   }
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
   const payload = Buffer.from(JSON.stringify({ userId, exp }), "utf8").toString("base64url");

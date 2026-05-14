@@ -12,7 +12,6 @@ function safeNextPath(next: string | null): string {
 function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [totp, setTotp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -38,7 +37,7 @@ function SignInForm() {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, totp }),
+      body: JSON.stringify({ email, password }),
     });
     const data = await res.json().catch(() => ({}));
 
@@ -111,20 +110,6 @@ function SignInForm() {
                 />
               </div>
 
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 opacity-60" />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]*"
-                  maxLength={8}
-                  className="block w-full rounded-2xl border border-white/5 bg-slate-950/50 px-12 py-4 text-white placeholder-slate-500 focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none tracking-widest"
-                  placeholder="6-digit authenticator code (if enabled)"
-                  value={totp}
-                  onChange={(e) => setTotp(e.target.value.replace(/[^\d]/g, ""))}
-                />
-              </div>
             </div>
 
             <button
@@ -146,7 +131,9 @@ function SignInForm() {
 
           <div className="mt-8 text-center">
             <p className="text-sm text-slate-500 font-medium">
-              Single owner account — use Argon2id `APP_LOGIN_PASSWORD_HASH`, optional `APP_LOGIN_TOTP_SECRET`, and a 48+ char `SESSION_SECRET`.
+              Credentials are set in <code className="text-slate-400">APP_LOGIN_EMAIL</code> and{" "}
+              <code className="text-slate-400">APP_LOGIN_PASSWORD</code>. Optional{" "}
+              <code className="text-slate-400">APP_LOGIN_PASSWORD_HASH</code> (argon2id) replaces the plain password.
             </p>
           </div>
         </div>
